@@ -21,10 +21,17 @@ target_metadata = Base.metadata
 
 
 def _get_database_url() -> str:
-    return os.environ.get(
+    url = os.environ.get(
         "FLOWPILOT_DATABASE_URL",
         config.get_main_option("sqlalchemy.url") or "",
     )
+    if url.startswith("postgres://"):
+        url = "postgresql+asyncpg://" + url[len("postgres://") :]
+    elif url.startswith("postgresql://"):
+        url = "postgresql+asyncpg://" + url[len("postgresql://") :]
+    if url.startswith("postgresql+asyncpg://") and "sslmode=" in url:
+        url = url.replace("sslmode=", "ssl=")
+    return url
 
 
 def run_migrations_offline() -> None:

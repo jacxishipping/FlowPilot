@@ -1,0 +1,69 @@
+# FlowPilot Render Blueprint (Infrastructure as Code)
+# Deploy directly in Render Dashboard -> New -> Blueprint -> connect jacxishipping/FlowPilot
+
+databases:
+  - name: flowpilot-db
+    plan: free
+    postgresMajorVersion: "16"
+    databaseName: flowpilot
+    user: flowpilot
+
+services:
+  - type: web
+    name: flowpilot-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./infrastructure/docker/api.Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: FLOWPILOT_ENVIRONMENT
+        value: production
+      - key: FLOWPILOT_EXECUTION_MODE
+        value: local
+      - key: FLOWPILOT_ALLOW_PRIVATE_NETWORKS
+        value: "false"
+      - key: FLOWPILOT_USE_S3_ARTIFACTS
+        value: "false"
+      - key: FLOWPILOT_DATABASE_URL
+        fromDatabase:
+          name: flowpilot-db
+          property: connectionString
+      - key: FLOWPILOT_MASTER_KEY
+        generateValue: true
+      - key: FLOWPILOT_SESSION_SECRET
+        generateValue: true
+      - key: FLOWPILOT_WEBHOOK_SIGNING_SECRET
+        generateValue: true
+      - key: FLOWPILOT_STRIPE_WEBHOOK_SECRET
+        generateValue: true
+      - key: FLOWPILOT_CORS_ORIGINS
+        value: https://flowpilot-web.onrender.com
+      - key: FLOWPILOT_CORS_ORIGIN_REGEX
+        value: ^https://flowpilot-web(-[a-z0-9]+)?\.onrender\.com$
+      # Optional LLM provider keys (set in Render Dashboard -> Environment if using live LLMs)
+      - key: FLOWPILOT_OPENAI_API_KEY
+        sync: false
+      - key: FLOWPILOT_ANTHROPIC_API_KEY
+        sync: false
+      - key: FLOWPILOT_GEMINI_API_KEY
+        sync: false
+
+  - type: web
+    name: flowpilot-web
+    runtime: node
+    plan: free
+    rootDir: apps/web
+    buildCommand: npm install && npm run build && cp -r .next/static .next/standalone/.next/static
+    startCommand: HOSTNAME=0.0.0.0 node .next/standalone/server.js
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          type: web
+          name: flowpilot-api
+          property: host

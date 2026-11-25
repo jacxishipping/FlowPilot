@@ -12,13 +12,14 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from flowpilot_api.config import normalize_async_database_url
 from flowpilot_api.db.models import Base
 
 
 def create_engine_and_sessionmaker(
     database_url: str,
 ) -> tuple[AsyncEngine, async_sessionmaker[AsyncSession]]:
-    engine = create_async_engine(database_url, future=True)
+    engine = create_async_engine(normalize_async_database_url(database_url), future=True)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     return engine, session_factory
 

@@ -37,6 +37,17 @@ npm install
 npm run dev
 ```
 
+### Deploy to Render (One-Click Blueprint)
+
+This repository includes a ready-to-deploy [`render.yaml`](render.yaml) Blueprint provisioning:
+- **`flowpilot-db`**: Managed PostgreSQL 16 (with `pgvector` + `FORCE ROW LEVEL SECURITY`)
+- **`flowpilot-api`**: FastAPI Docker service (auto-runs `alembic upgrade head`, auto-generates secrets)
+- **`flowpilot-web`**: Next.js Studio UI (auto-wired to `flowpilot-api`)
+
+1. In the [Render Dashboard](https://dashboard.render.com/), click **New + → Blueprint**.
+2. Connect this GitHub repository (`jacxishipping/FlowPilot`).
+3. Click **Apply** — Render will provision the database, run migrations, and bring up both the API and Studio UI automatically.
+
 ### Full Docker Compose Stack
 
 ```bash

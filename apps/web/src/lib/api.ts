@@ -12,8 +12,14 @@ import type {
   WorkflowRunState,
 } from "./types";
 
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") || "http://localhost:8000";
+function normalizeApiBaseUrl(raw?: string): string {
+  const trimmed = raw?.trim().replace(/\/$/, "");
+  if (!trimmed) return "http://localhost:8000";
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed;
+  return `https://${trimmed}`;
+}
+
+export const API_BASE_URL = normalizeApiBaseUrl(process.env.NEXT_PUBLIC_API_URL);
 
 export class ApiError extends Error {
   status: number;

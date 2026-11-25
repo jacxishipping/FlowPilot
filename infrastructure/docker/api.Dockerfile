@@ -10,7 +10,7 @@ RUN pip install --no-cache-dir uv
 WORKDIR /app
 
 # Copy workspace manifests & source packages
-COPY pyproject.toml alembic.ini ./
+COPY pyproject.toml uv.lock alembic.ini ./
 COPY packages ./packages
 COPY nodes ./nodes
 COPY apps/api ./apps/api
@@ -29,4 +29,4 @@ USER flowpilot
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "uv run alembic upgrade head && uv run uvicorn flowpilot_api.app:app --host 0.0.0.0 --port 8000"]
+CMD ["sh", "-c", "uv run alembic upgrade head && uv run uvicorn flowpilot_api.app:app --host 0.0.0.0 --port ${PORT:-8000}"]

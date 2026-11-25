@@ -38,8 +38,28 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     gemini_api_key: str = ""
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
+    cors_origin_regex: str | None = None
     allow_private_networks: bool = False
     auto_create_tables: bool = False
 
     def cors_origin_list(self) -> list[str]:
-        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+        origins: list[str] = []
+        for raw in self.cors_origins.split(","):
+            item = raw.strip().rstrip("/")
+            if not item:
+                continue
+            if not item.startswith(("http://", "https://")):
+                item = f"https://{item}"
+            origins.append(item)
+        return origins
+
+
+def normalize_async_database_url(url: str) -> str:
+    """Convert standard postgres:// or postgresql:// URLs (e.g. Render) to postgresql+asyncpg://."""
+    if url.startswith("postgres://"):
+        url = "postgresql+asyncpg://" + url[len("postgres://") :]
+    elif url.startswith("postgresql://"):
+        url = "postgresql+asyncpg://" + url[len("postgresql://") :]
+    if url.startswith("postgresql+asyncpg://") and "sslmode=" in url:
+        url = url.replace("sslmode=", "ssl=")
+    return url
