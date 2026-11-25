@@ -55,7 +55,7 @@ services:
     runtime: node
     plan: free
     rootDir: apps/web
-    buildCommand: npm install && npm run build && cp -r .next/static .next/standalone/.next/static
+    buildCommand: npm install --include=dev && npm run build && cp -r .next/static .next/standalone/.next/static
     startCommand: HOSTNAME=0.0.0.0 node .next/standalone/server.js
     healthCheckPath: /
     autoDeploy: true
