@@ -14,11 +14,13 @@ dependencies = [
     "flowpilot-nodes-email",
     "flowpilot-nodes-slack",
     "flowpilot-nodes-database",
+    "flowpilot-nodes-connectors",
     "flowpilot-credentials",
     "flowpilot-policy",
     "flowpilot-observability",
     "flowpilot-agents",
     "flowpilot-api",
+    "flowpilot-cli",
     "flowpilot-scheduler",
     "flowpilot-worker-workflow",
     "flowpilot-worker-code",
@@ -49,7 +51,9 @@ members = [
     "nodes/email",
     "nodes/slack",
     "nodes/database",
+    "nodes/connectors",
     "apps/api",
+    "apps/cli",
     "apps/scheduler",
     "apps/workers/workflow",
     "apps/workers/code",
@@ -66,11 +70,13 @@ flowpilot-nodes-core = { workspace = true }
 flowpilot-nodes-email = { workspace = true }
 flowpilot-nodes-slack = { workspace = true }
 flowpilot-nodes-database = { workspace = true }
+flowpilot-nodes-connectors = { workspace = true }
 flowpilot-credentials = { workspace = true }
 flowpilot-policy = { workspace = true }
 flowpilot-observability = { workspace = true }
 flowpilot-agents = { workspace = true }
 flowpilot-api = { workspace = true }
+flowpilot-cli = { workspace = true }
 flowpilot-scheduler = { workspace = true }
 flowpilot-worker-workflow = { workspace = true }
 flowpilot-worker-code = { workspace = true }
@@ -99,7 +105,9 @@ src = [
     "nodes/email/src",
     "nodes/slack/src",
     "nodes/database/src",
+    "nodes/connectors/src",
     "apps/api/src",
+    "apps/cli/src",
     "apps/scheduler/src",
     "apps/workers/workflow/src",
     "apps/workers/code/src",
@@ -132,7 +140,9 @@ mypy_path = [
     "nodes/email/src",
     "nodes/slack/src",
     "nodes/database/src",
+    "nodes/connectors/src",
     "apps/api/src",
+    "apps/cli/src",
     "apps/scheduler/src",
     "apps/workers/workflow/src",
     "apps/workers/code/src",

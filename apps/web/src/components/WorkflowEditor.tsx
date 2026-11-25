@@ -16,7 +16,9 @@ import {
   CheckSquare,
   Cloud,
   GitCommitHorizontal,
+  Inbox,
   LayoutGrid,
+  LayoutTemplate,
   LogIn,
   Play,
   Plus,
@@ -28,21 +30,30 @@ import {
 } from "lucide-react";
 import {
   FALLBACK_NODE_CATALOG,
+  type InboxApprovalItem,
+  type TemplateSummary,
+  type WorkflowDiffResult,
   bootstrapDevTenant,
   createCredentialApi,
   createWorkflow,
+  diffWorkflowVersionsApi,
   fetchNodeCatalog,
   fetchRunEventsSse,
   fetchWorkflowJsonSchema,
+  generateApprovalActionLinksApi,
   generateWorkflowDraftApi,
+  listApprovalsInboxApi,
   listCredentialsApi,
   listProjectsApi,
+  listTemplatesApi,
   listWorkflowVersionsApi,
   listWorkflowsApi,
   loginAccountApi,
   patchWorkflow,
   publishWorkflowApi,
   registerAccountApi,
+  replayRunFromNodeApi,
+  rollbackWorkflowApi,
   startWorkflowRunApi,
   submitApprovalDecisionApi,
   validateWorkflowApi,
@@ -66,10 +77,12 @@ import type {
   WorkflowRunState,
 } from "@/lib/types";
 import { AiDraftModal } from "./AiDraftModal";
+import { ApprovalInboxModal } from "./ApprovalInboxModal";
 import { AuthModal } from "./AuthModal";
 import { FlowNode } from "./FlowNode";
 import { InspectorPanel, type InspectorTab } from "./InspectorPanel";
 import { NodeLibrary } from "./NodeLibrary";
+import { TemplatesModal } from "./TemplatesModal";
 import { VersionHistoryModal, type VersionSummary } from "./VersionHistoryModal";
 
 const NODE_TYPES: NodeTypes = { flowNode: FlowNode };
@@ -94,6 +107,12 @@ function WorkflowEditorInner() {
   const [authLoading, setAuthLoading] = useState(false);
   const [versionModalOpen, setVersionModalOpen] = useState(false);
   const [versions, setVersions] = useState<VersionSummary[]>([]);
+  const [diffResult, setDiffResult] = useState<WorkflowDiffResult | null>(null);
+  const [templatesModalOpen, setTemplatesModalOpen] = useState(false);
+  const [templates, setTemplates] = useState<TemplateSummary[]>([]);
+  const [inboxModalOpen, setInboxModalOpen] = useState(false);
+  const [inboxItems, setInboxItems] = useState<InboxApprovalItem[]>([]);
+  const [pinnedOutputs, setPinnedOutputs] = useState<Record<string, unknown>>({});
   const [savedWorkflows, setSavedWorkflows] = useState<WorkflowRecord[]>([]);
   const [statusBanner, setStatusBanner] = useState<string>("Ready — offline preview or connect API");
 
@@ -359,9 +378,89 @@ function WorkflowEditorInner() {
   const handleNewWorkflow = () => {
     setWorkflowRecord(null);
     setPublishedVersion(null);
+    setDiffResult(null);
     setWorkflowName(`Workflow ${savedWorkflows.length + 1}`);
     commitGraph(() => createStarterWorkflowGraph());
     setStatusBanner("Started new local workflow draft");
+  };
+
+  const handleOpenTemplates = async () => {
+    try {
+      const list = await listTemplatesApi();
+      setTemplates(list);
+    } catch {
+      setTemplates([
+        {
+          slug: "invoice-approval",
+          name: "Invoice Approval Pipeline",
+          category: "finance",
+          description: "Routes high-value invoices through a human approval gate.",
+          tags: ["finance", "approval"],
+          node_count: 5,
+          graph: createStarterWorkflowGraph(),
+        },
+      ]);
+    }
+    setTemplatesModalOpen(true);
+  };
+
+  const handleOpenInbox = async () => {
+    if (session) {
+      try {
+        const items = await listApprovalsInboxApi(session.api_key);
+        setInboxItems(items);
+      } catch {
+        // ignore if offline
+      }
+    }
+    setInboxModalOpen(true);
+  };
+
+  const handleCompareVersions = async (fromVersion: number, toVersion: number) => {
+    if (!session || !workflowRecord) return;
+    try {
+      const res = await diffWorkflowVersionsApi(
+        session.api_key,
+        workflowRecord.id,
+        fromVersion,
+        toVersion,
+      );
+      setDiffResult(res);
+      setStatusBanner(`Highlighted diff v${fromVersion} -> v${toVersion} on canvas`);
+    } catch (err) {
+      setStatusBanner(`Diff failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  const handleRollbackVersion = async (versionNumber: number) => {
+    if (!session || !workflowRecord) return;
+    try {
+      const res = await rollbackWorkflowApi(session.api_key, workflowRecord.id, versionNumber);
+      commitGraph(() => res.definition.graph);
+      setPublishedVersion(res.new_version_number);
+      setVersionModalOpen(false);
+      setStatusBanner(`Rolled back to v${versionNumber} (published as v${res.new_version_number})`);
+    } catch (err) {
+      setStatusBanner(`Rollback failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  const handleReplayFromNode = async (startNodeId: string) => {
+    if (!session || !activeRun) return;
+    try {
+      const forked = await replayRunFromNodeApi(
+        session.api_key,
+        activeRun.id,
+        startNodeId,
+        pinnedOutputs,
+      );
+      setActiveRun(forked);
+      const events = await fetchRunEventsSse(session.api_key, forked.id);
+      setRunEvents(events);
+      setStatusBanner(`Time-travel replayed from '${startNodeId}' -> ${forked.status}`);
+    } catch (err) {
+      setStatusBanner(`Replay failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
   };
 
   const handleValidate = async () => {
@@ -471,9 +570,28 @@ function WorkflowEditorInner() {
     return set;
   }, [validation]);
 
+  const diffHighlights = useMemo(() => {
+    const map: Record<string, "added" | "modified" | "removed"> = {};
+    if (!diffResult) return map;
+    for (const id of diffResult.added_nodes) map[id] = "added";
+    for (const m of diffResult.modified_nodes) map[m.node_id] = "modified";
+    for (const id of diffResult.removed_nodes) map[id] = "removed";
+    return map;
+  }, [diffResult]);
+
+  const pinnedNodeIds = useMemo(() => new Set(Object.keys(pinnedOutputs)), [pinnedOutputs]);
+
   const { nodes: canvasNodes, edges: canvasEdges } = useMemo(
-    () => canonicalToCanvas(graph, catalogByType, nodeStatuses, errorNodeIds),
-    [graph, catalogByType, nodeStatuses, errorNodeIds],
+    () =>
+      canonicalToCanvas(
+        graph,
+        catalogByType,
+        nodeStatuses,
+        errorNodeIds,
+        diffHighlights,
+        pinnedNodeIds,
+      ),
+    [graph, catalogByType, nodeStatuses, errorNodeIds, diffHighlights, pinnedNodeIds],
   );
 
   const selectedNode = useMemo(
@@ -551,6 +669,12 @@ function WorkflowEditorInner() {
         </div>
 
         <div className="topbar-group">
+          <button className="btn" onClick={handleOpenTemplates} title="Templates Gallery">
+            <LayoutTemplate size={13} /> Templates
+          </button>
+          <button className="btn" onClick={handleOpenInbox} title="Approvals Inbox">
+            <Inbox size={13} /> Inbox
+          </button>
           <button className="btn" onClick={() => setAuthModalOpen(true)} title="Sign In / Register">
             <LogIn size={13} /> {session ? "Account" : "Sign In"}
           </button>
@@ -711,6 +835,12 @@ function WorkflowEditorInner() {
             setActiveTab("configure");
           }}
           onRunWorkflow={handleRun}
+          onReplayFromNode={handleReplayFromNode}
+          pinnedOutputs={pinnedOutputs}
+          onPinNodeOutput={(nid, out) => {
+            setPinnedOutputs((prev) => ({ ...prev, [nid]: out }));
+            setStatusBanner(`Pinned sample output for node '${nid}'`);
+          }}
           onDecideApproval={handleDecideApproval}
           onCreateCredential={handleCreateCredential}
           connected={Boolean(session) || true}
@@ -736,7 +866,38 @@ function WorkflowEditorInner() {
         open={versionModalOpen}
         versions={versions}
         currentRevision={workflowRecord?.revision ?? 1}
+        diffResult={diffResult}
         onClose={() => setVersionModalOpen(false)}
+        onCompare={handleCompareVersions}
+        onRollback={handleRollbackVersion}
+      />
+
+      <TemplatesModal
+        open={templatesModalOpen}
+        templates={templates}
+        onClose={() => setTemplatesModalOpen(false)}
+        onSelectTemplate={(tpl) => {
+          setWorkflowRecord(null);
+          setPublishedVersion(null);
+          setWorkflowName(tpl.name);
+          commitGraph(() => tpl.graph);
+          setTemplatesModalOpen(false);
+          setStatusBanner(`Loaded template '${tpl.name}' onto canvas`);
+        }}
+      />
+
+      <ApprovalInboxModal
+        open={inboxModalOpen}
+        items={inboxItems}
+        onClose={() => setInboxModalOpen(false)}
+        onDecide={async (id, approved, comment) => {
+          await handleDecideApproval(id, approved, comment);
+          if (session) setInboxItems(await listApprovalsInboxApi(session.api_key));
+        }}
+        onGenerateLinks={async (id) => {
+          if (!session) throw new Error("Sign in first");
+          return generateApprovalActionLinksApi(session.api_key, id);
+        }}
       />
     </div>
   );

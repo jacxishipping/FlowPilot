@@ -1,5 +1,11 @@
 """FlowPilot deterministic workflow execution engine."""
 
+from flowpilot_engine.evals import (
+    EvalCase,
+    EvalCaseResult,
+    EvalSuiteResult,
+    WorkflowEvalRunner,
+)
 from flowpilot_engine.events import EventSink, InMemoryEventSink, format_sse
 from flowpilot_engine.interpreter import GraphInterpreter, StepPlan
 from flowpilot_engine.reliability import (
@@ -53,6 +59,9 @@ __all__ = [
     "CircuitState",
     "DeadLetterEntry",
     "DeadLetterQueue",
+    "EvalCase",
+    "EvalCaseResult",
+    "EvalSuiteResult",
     "EventBus",
     "EventSink",
     "ExecutionStore",
@@ -69,6 +78,7 @@ __all__ = [
     "S3ArtifactStore",
     "StepPlan",
     "TemporalOrchestrationPort",
+    "WorkflowEvalRunner",
     "WorkflowExecutionEngine",
     "WorkflowExecutionError",
     "compute_backoff_ms",

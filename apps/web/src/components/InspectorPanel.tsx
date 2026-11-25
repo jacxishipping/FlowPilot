@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { CheckCircle2, KeyRound, Play, ShieldAlert, Trash2, XCircle } from "lucide-react";
+import { useMemo, useState } from "react";
+import { CheckCircle2, KeyRound, Play, ShieldAlert, Sparkles, Trash2, XCircle } from "lucide-react";
+import { previewExpressionApi } from "@/lib/api";
 import type {
   CredentialMeta,
   EdgeDefinition,
@@ -35,6 +36,9 @@ interface InspectorPanelProps {
   onDeleteEdge: (edgeId: string) => void;
   onSelectNodeId: (nodeId: string) => void;
   onRunWorkflow: () => void;
+  onReplayFromNode: (nodeId: string) => void;
+  pinnedOutputs: Record<string, unknown>;
+  onPinNodeOutput: (nodeId: string, output: unknown) => void;
   onDecideApproval: (approvalId: string, approved: boolean, comment: string) => void;
   onCreateCredential: (name: string, type: string, token: string) => Promise<void>;
   connected: boolean;
@@ -60,6 +64,9 @@ export function InspectorPanel({
   onDeleteEdge,
   onSelectNodeId,
   onRunWorkflow,
+  onReplayFromNode,
+  pinnedOutputs,
+  onPinNodeOutput,
   onDecideApproval,
   onCreateCredential,
   connected,
@@ -109,6 +116,8 @@ export function InspectorPanel({
                 node={selectedNode}
                 catalogEntry={catalogEntry}
                 upstreamNodeIds={upstreamNodeIds}
+                pinnedOutputs={pinnedOutputs}
+                triggerInputJson={triggerInputJson}
                 credentials={credentials}
                 onUpdate={(updater) => onUpdateNode(selectedNode.id, updater)}
                 onDelete={() => onDeleteNode(selectedNode.id)}
@@ -334,6 +343,45 @@ export function InspectorPanel({
                     </div>
                   ))}
 
+                <div className="section-title">Node Outputs, Pinning & Time-Travel Replay</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+                  {Object.values(activeRun.node_executions).map((ne) => (
+                    <div
+                      key={ne.node_id}
+                      style={{
+                        padding: 8,
+                        borderRadius: 6,
+                        border: "1px solid var(--border)",
+                        background: "var(--bg-elevated)",
+                        fontSize: 11,
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontFamily: "monospace", fontWeight: 700 }}>{ne.node_id}</span>
+                        <span className="pill">{ne.status}</span>
+                      </div>
+                      <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                        <button
+                          className="btn"
+                          style={{ height: 24, fontSize: 10 }}
+                          onClick={() => onReplayFromNode(ne.node_id)}
+                        >
+                          Fork & Replay Here
+                        </button>
+                        {ne.output_ref?.inline !== undefined && (
+                          <button
+                            className="btn"
+                            style={{ height: 24, fontSize: 10 }}
+                            onClick={() => onPinNodeOutput(ne.node_id, ne.output_ref?.inline)}
+                          >
+                            {pinnedOutputs[ne.node_id] !== undefined ? "Pinned ✓" : "Pin Output"}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
                 <div className="section-title">SSE Execution Event Log ({runEvents.length})</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {runEvents.map((evt) => (
@@ -433,10 +481,34 @@ export function InspectorPanel({
   );
 }
 
+function extractLeafPaths(value: unknown, prefix: string, depth = 0): string[] {
+  if (depth > 3 || value === null || value === undefined || typeof value !== "object") {
+    return [prefix];
+  }
+  if (Array.isArray(value)) {
+    return value.length > 0 ? [prefix, `${prefix}[0]`] : [prefix];
+  }
+  const entries = Object.entries(value as Record<string, unknown>).slice(0, 12);
+  if (entries.length === 0) return [prefix];
+  const paths: string[] = [];
+  for (const [k, v] of entries) {
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(k)) continue;
+    const next = `${prefix}.${k}`;
+    if (v !== null && typeof v === "object" && !Array.isArray(v) && depth < 2) {
+      paths.push(...extractLeafPaths(v, next, depth + 1));
+    } else {
+      paths.push(next);
+    }
+  }
+  return paths.length > 0 ? paths : [prefix];
+}
+
 function NodeConfigEditor({
   node,
   catalogEntry,
   upstreamNodeIds,
+  pinnedOutputs,
+  triggerInputJson,
   credentials,
   onUpdate,
   onDelete,
@@ -444,6 +516,8 @@ function NodeConfigEditor({
   node: NodeDefinition;
   catalogEntry?: NodeCatalogEntry;
   upstreamNodeIds: string[];
+  pinnedOutputs: Record<string, unknown>;
+  triggerInputJson: string;
   credentials: CredentialMeta[];
   onUpdate: (updater: (n: NodeDefinition) => NodeDefinition) => void;
   onDelete: () => void;
@@ -451,6 +525,74 @@ function NodeConfigEditor({
   const properties = catalogEntry?.config_schema.properties ?? {};
   const requiredFields = new Set(catalogEntry?.config_schema.required ?? []);
   const credReqs = catalogEntry?.metadata.credentials ?? [];
+  const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [previewExpr, setPreviewExpr] = useState("");
+  const [previewResult, setPreviewResult] = useState<{
+    ok: boolean;
+    value: unknown;
+    error: string | null;
+  } | null>(null);
+
+  const autocompleteTokens = useMemo(() => {
+    const tokens: string[] = [];
+    try {
+      const parsedTrigger = JSON.parse(triggerInputJson || "{}");
+      for (const path of extractLeafPaths(parsedTrigger, "trigger")) {
+        tokens.push(`{{ ${path} }}`);
+      }
+    } catch {
+      tokens.push("{{ trigger }}");
+    }
+    for (const uid of upstreamNodeIds) {
+      const pinned = pinnedOutputs[uid];
+      if (pinned !== undefined) {
+        for (const path of extractLeafPaths(pinned, `nodes.${uid}.output`)) {
+          tokens.push(`{{ ${path} }}`);
+        }
+      } else {
+        tokens.push(`{{ nodes.${uid}.output }}`);
+      }
+    }
+    return tokens.slice(0, 24);
+  }, [upstreamNodeIds, pinnedOutputs, triggerInputJson]);
+
+  const runLivePreview = async (expr: string) => {
+    setPreviewExpr(expr);
+    if (!expr.trim()) {
+      setPreviewResult(null);
+      return;
+    }
+    let triggerObj: Record<string, unknown> = {};
+    try {
+      triggerObj = JSON.parse(triggerInputJson || "{}");
+    } catch {
+      triggerObj = {};
+    }
+    try {
+      const res = await previewExpressionApi(expr, pinnedOutputs, triggerObj);
+      setPreviewResult(res);
+    } catch (err) {
+      setPreviewResult({
+        ok: false,
+        value: null,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  };
+
+  const insertExpressionToken = (token: string) => {
+    if (focusedField) {
+      const cur = node.config[focusedField];
+      const next = `${cur === undefined || cur === null ? "" : String(cur)}${token}`;
+      updateConfigField(focusedField, next);
+      void runLivePreview(next);
+    } else {
+      void runLivePreview(token);
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        void navigator.clipboard.writeText(token).catch(() => undefined);
+      }
+    }
+  };
 
   const updateConfigField = (key: string, val: unknown) => {
     onUpdate((n) => ({
@@ -483,20 +625,60 @@ function NodeConfigEditor({
         />
       </div>
 
-      {upstreamNodeIds.length > 0 && (
+      {autocompleteTokens.length > 0 && (
         <div className="field-group">
-          <div className="field-label">Upstream Expression Helpers</div>
+          <div className="field-label" style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <Sparkles size={11} /> Clickable Expression Autocomplete{" "}
+            {focusedField ? `(inserts into "${focusedField}")` : "(click to preview/copy)"}
+          </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-            {upstreamNodeIds.map((uid) => (
-              <span
-                key={uid}
+            {autocompleteTokens.map((tok) => (
+              <button
+                key={tok}
+                type="button"
                 className="pill pill-info"
-                style={{ fontFamily: "monospace", textTransform: "none" }}
-                title="Copy expression syntax into any string field"
+                style={{
+                  fontFamily: "monospace",
+                  textTransform: "none",
+                  cursor: "pointer",
+                  border: "none",
+                }}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => insertExpressionToken(tok)}
+                title="Click to insert into active field and preview live value"
               >
-                {`{{ nodes.${uid}.output }}`}
-              </span>
+                {tok}
+              </button>
             ))}
+          </div>
+          <div style={{ marginTop: 6 }}>
+            <input
+              className="input"
+              style={{ fontSize: 11, fontFamily: "monospace" }}
+              value={previewExpr}
+              placeholder="Live expression preview e.g. {{ trigger.amount * 2 }}"
+              onChange={(e) => void runLivePreview(e.target.value)}
+            />
+            {previewResult && (
+              <div
+                style={{
+                  marginTop: 4,
+                  padding: "4px 8px",
+                  borderRadius: 6,
+                  fontSize: 11,
+                  fontFamily: "monospace",
+                  background: previewResult.ok
+                    ? "rgba(16, 185, 129, 0.12)"
+                    : "rgba(239, 68, 68, 0.12)",
+                  color: previewResult.ok ? "#34d399" : "#f87171",
+                  wordBreak: "break-all",
+                }}
+              >
+                {previewResult.ok
+                  ? `=> ${JSON.stringify(previewResult.value)}`
+                  : `Error: ${previewResult.error}`}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -582,8 +764,12 @@ function NodeConfigEditor({
               className="input"
               value={currentVal === undefined || currentVal === null ? "" : String(currentVal)}
               placeholder={prop.default !== undefined ? String(prop.default) : "{{ nodes... }}"}
+              onFocus={() => setFocusedField(key)}
               onChange={(e) => {
                 const raw = e.target.value;
+                if (raw.includes("{{")) {
+                  void runLivePreview(raw);
+                }
                 if (
                   (prop.type === "integer" || prop.type === "number") &&
                   raw !== "" &&

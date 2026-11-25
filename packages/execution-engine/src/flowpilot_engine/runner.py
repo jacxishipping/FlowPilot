@@ -95,6 +95,39 @@ class WorkflowExecutionEngine:
         self._validator = WorkflowValidator(registry)
         self._event_seq: dict[UUID, int] = {}
         self._canceled_runs: set[UUID] = set()
+        if "subworkflow_runner" not in self._services:
+            self._services["subworkflow_runner"] = self._run_subworkflow
+
+    async def _run_subworkflow(
+        self,
+        organization_id: UUID,
+        workflow_version_id: UUID,
+        input_payload: dict[str, Any],
+        depth: int,
+    ) -> dict[str, Any]:
+        version = await self._store.get_version(workflow_version_id)
+        if version is None or version.organization_id != organization_id:
+            raise WorkflowExecutionError(
+                f"Sub-workflow version '{workflow_version_id}' not found for org "
+                f"'{organization_id}'."
+            )
+        prev_depth = self._services.get("_subworkflow_depth", 0)
+        self._services["_subworkflow_depth"] = depth
+        try:
+            child_run = await self.start_run(
+                version,
+                organization_id=organization_id,
+                trigger_input=input_payload,
+                trigger_type="subworkflow",
+            )
+        finally:
+            self._services["_subworkflow_depth"] = prev_depth
+        child_out = await self._payloads.unpack(child_run.output_ref)
+        return {
+            "child_run_id": str(child_run.id),
+            "status": child_run.status.value,
+            "output": child_out,
+        }
 
     @property
     def store(self) -> ExecutionStore:
@@ -192,6 +225,144 @@ class WorkflowExecutionEngine:
         )
 
         return await self._drive_run(run_id_holder, version)
+
+    async def replay_from_node(
+        self,
+        source_run_id: UUID,
+        version: WorkflowVersion,
+        *,
+        organization_id: UUID,
+        start_node_id: str,
+        config_overrides: dict[str, dict[str, Any]] | None = None,
+        pinned_outputs: dict[str, Any] | None = None,
+    ) -> WorkflowRun:
+        """Time-travel debugging: fork a prior run from start_node_id, reusing upstream outputs.
+
+        All strict ancestors of start_node_id reuse their SUCCEEDED outputs from source_run_id
+        (or explicit pinned_outputs) without re-executing; start_node_id and its descendants run
+        fresh with optional config_overrides.
+        """
+        if version.organization_id != organization_id:
+            raise WorkflowExecutionError(
+                "Tenant isolation violation: cannot replay workflow version of another org."
+            )
+        source_run = await self._store.get_run(source_run_id)
+        if source_run is None or source_run.organization_id != organization_id:
+            raise WorkflowExecutionError(f"Source run '{source_run_id}' not found.")
+
+        graph = version.definition.graph
+        node_ids = {n.id for n in graph.nodes}
+        if start_node_id not in node_ids:
+            raise WorkflowExecutionError(
+                f"Node '{start_node_id}' does not exist in workflow version '{version.id}'."
+            )
+
+        # Compute strict descendants of start_node_id (including start_node_id) to re-run
+        outgoing: dict[str, list[str]] = {n.id: [] for n in graph.nodes}
+        for edge in graph.edges:
+            outgoing[edge.source].append(edge.target)
+
+        to_rerun: set[str] = set()
+        stack = [start_node_id]
+        while stack:
+            cur = stack.pop()
+            if cur in to_rerun:
+                continue
+            to_rerun.add(cur)
+            stack.extend(outgoing.get(cur, ()))
+
+        # Apply optional node config overrides to an isolated copy of the version definition
+        effective_version = version
+        if config_overrides:
+            patched_def = version.definition.model_copy(deep=True)
+            for node in patched_def.graph.nodes:
+                if node.id in config_overrides:
+                    node.config = {**node.config, **config_overrides[node.id]}
+            effective_version = WorkflowVersion(
+                id=version.id,
+                workflow_id=version.workflow_id,
+                organization_id=version.organization_id,
+                version_number=version.version_number,
+                definition=patched_def,
+                content_hash=version.content_hash,
+                published_at=version.published_at,
+                published_by=version.published_by,
+                changelog=version.changelog,
+            )
+
+        forked_run = WorkflowRun(
+            organization_id=organization_id,
+            workflow_id=version.workflow_id,
+            workflow_version_id=version.id,
+            status=RunStatus.QUEUED,
+            trigger_type=f"replay:{start_node_id}",
+            input_ref=source_run.input_ref,
+        )
+        inline_limit = effective_version.definition.settings.payload_inline_limit_bytes
+        pins = pinned_outputs or {}
+
+        for node in effective_version.definition.graph.nodes:
+            prior_exec = source_run.node_executions.get(node.id)
+            if node.id in pins and node.id not in to_rerun:
+                ref = await self._payloads.pack(
+                    organization_id=organization_id,
+                    run_id=forked_run.id,
+                    payload=pins[node.id],
+                    inline_limit_bytes=inline_limit,
+                )
+                forked_run.node_executions[node.id] = NodeExecution(
+                    run_id=forked_run.id,
+                    node_id=node.id,
+                    node_type=node.type,
+                    status=NodeStatus.SUCCEEDED,
+                    attempt=0,
+                    output_ref=ref,
+                    branch_taken=prior_exec.branch_taken if prior_exec else None,
+                )
+            elif (
+                node.id not in to_rerun
+                and prior_exec is not None
+                and prior_exec.status in (NodeStatus.SUCCEEDED, NodeStatus.SKIPPED)
+            ):
+                forked_run.node_executions[node.id] = NodeExecution(
+                    run_id=forked_run.id,
+                    node_id=node.id,
+                    node_type=node.type,
+                    status=prior_exec.status,
+                    attempt=0,
+                    output_ref=prior_exec.output_ref,
+                    branch_taken=prior_exec.branch_taken,
+                    duration_ms=0,
+                )
+            else:
+                forked_run.node_executions[node.id] = NodeExecution(
+                    run_id=forked_run.id,
+                    node_id=node.id,
+                    node_type=node.type,
+                    status=NodeStatus.PENDING,
+                )
+
+        forked_run.usage_records.append(
+            UsageRecord(
+                organization_id=organization_id,
+                run_id=forked_run.id,
+                metric="workflow_run",
+                quantity=1.0,
+                unit="run",
+                metadata={
+                    "replayed_from_run_id": str(source_run_id),
+                    "start_node_id": start_node_id,
+                },
+            )
+        )
+        await self._store.save_run(forked_run)
+        await self._emit(
+            forked_run,
+            EventType.RUN_CREATED,
+            node_id=start_node_id,
+            payload={"replayed_from_run_id": str(source_run_id), "start_node_id": start_node_id},
+        )
+        return await self._drive_run(forked_run, effective_version)
 
     async def submit_approval_decision(
         self,

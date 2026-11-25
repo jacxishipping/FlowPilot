@@ -11,10 +11,12 @@ members = [
     "flowpilot",
     "flowpilot-agents",
     "flowpilot-api",
+    "flowpilot-cli",
     "flowpilot-credentials",
     "flowpilot-engine",
     "flowpilot-expressions",
     "flowpilot-node-sdk",
+    "flowpilot-nodes-connectors",
     "flowpilot-nodes-core",
     "flowpilot-nodes-database",
     "flowpilot-nodes-email",
@@ -409,10 +411,12 @@ source = { virtual = "." }
 dependencies = [
     { name = "flowpilot-agents" },
     { name = "flowpilot-api" },
+    { name = "flowpilot-cli" },
     { name = "flowpilot-credentials" },
     { name = "flowpilot-engine" },
     { name = "flowpilot-expressions" },
     { name = "flowpilot-node-sdk" },
+    { name = "flowpilot-nodes-connectors" },
     { name = "flowpilot-nodes-core" },
     { name = "flowpilot-nodes-database" },
     { name = "flowpilot-nodes-email" },
@@ -440,10 +444,12 @@ dev = [
 requires-dist = [
     { name = "flowpilot-agents", editable = "packages/agent-runtime" },
     { name = "flowpilot-api", editable = "apps/api" },
+    { name = "flowpilot-cli", editable = "apps/cli" },
     { name = "flowpilot-credentials", editable = "packages/credential-manager" },
     { name = "flowpilot-engine", editable = "packages/execution-engine" },
     { name = "flowpilot-expressions", editable = "packages/expression-engine" },
     { name = "flowpilot-node-sdk", editable = "packages/node-sdk" },
+    { name = "flowpilot-nodes-connectors", editable = "nodes/connectors" },
     { name = "flowpilot-nodes-core", editable = "nodes/core" },
     { name = "flowpilot-nodes-database", editable = "nodes/database" },
     { name = "flowpilot-nodes-email", editable = "nodes/email" },
@@ -505,6 +511,7 @@ dependencies = [
     { name = "flowpilot-engine" },
     { name = "flowpilot-expressions" },
     { name = "flowpilot-node-sdk" },
+    { name = "flowpilot-nodes-connectors" },
     { name = "flowpilot-nodes-core" },
     { name = "flowpilot-nodes-database" },
     { name = "flowpilot-nodes-email" },
@@ -532,6 +539,7 @@ requires-dist = [
     { name = "flowpilot-engine", editable = "packages/execution-engine" },
     { name = "flowpilot-expressions", editable = "packages/expression-engine" },
     { name = "flowpilot-node-sdk", editable = "packages/node-sdk" },
+    { name = "flowpilot-nodes-connectors", editable = "nodes/connectors" },
     { name = "flowpilot-nodes-core", editable = "nodes/core" },
     { name = "flowpilot-nodes-database", editable = "nodes/database" },
     { name = "flowpilot-nodes-email", editable = "nodes/email" },
@@ -547,6 +555,27 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.6.0" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.36" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32.0" },
+]
+
+[[package]]
+name = "flowpilot-cli"
+version = "0.1.0"
+source = { editable = "apps/cli" }
+dependencies = [
+    { name = "flowpilot-api" },
+    { name = "flowpilot-engine" },
+    { name = "flowpilot-schema" },
+    { name = "flowpilot-validator" },
+    { name = "httpx" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "flowpilot-api", editable = "apps/api" },
+    { name = "flowpilot-engine", editable = "packages/execution-engine" },
+    { name = "flowpilot-schema", editable = "packages/workflow-schema" },
+    { name = "flowpilot-validator", editable = "packages/workflow-validator" },
+    { name = "httpx", specifier = ">=0.28.0" },
 ]
 
 [[package]]
@@ -606,6 +635,23 @@ requires-dist = [
     { name = "cryptography", specifier = ">=44.0.0" },
     { name = "flowpilot-schema", editable = "packages/workflow-schema" },
     { name = "httpx", specifier = ">=0.28.0" },
+    { name = "pydantic", specifier = ">=2.10.0" },
+]
+
+[[package]]
+name = "flowpilot-nodes-connectors"
+version = "0.1.0"
+source = { editable = "nodes/connectors" }
+dependencies = [
+    { name = "flowpilot-node-sdk" },
+    { name = "flowpilot-schema" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "flowpilot-node-sdk", editable = "packages/node-sdk" },
+    { name = "flowpilot-schema", editable = "packages/workflow-schema" },
     { name = "pydantic", specifier = ">=2.10.0" },
 ]
 

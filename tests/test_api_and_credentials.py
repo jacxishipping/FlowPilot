@@ -84,7 +84,7 @@ async def test_api_v1_end_to_end_multi_tenant_approvals_credentials_sse_and_ai(
             assert "x-request-id" in health.headers
 
             catalog = (await client.get("/api/v1/nodes/catalog")).json()
-            assert len(catalog["nodes"]) == 17
+            assert len(catalog["nodes"]) == 25
 
             wf_schema = (await client.get("/api/v1/schemas/workflow")).json()
             assert wf_schema["title"] == "WorkflowDefinition"

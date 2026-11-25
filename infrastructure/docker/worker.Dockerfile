@@ -13,6 +13,7 @@ COPY pyproject.toml ./
 COPY packages ./packages
 COPY nodes ./nodes
 COPY apps/api ./apps/api
+COPY apps/cli ./apps/cli
 COPY apps/scheduler ./apps/scheduler
 COPY apps/workers/workflow ./apps/workers/workflow
 COPY apps/workers/code ./apps/workers/code

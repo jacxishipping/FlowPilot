@@ -16,6 +16,8 @@ export interface FlowNodeData extends Record<string, unknown> {
   executionStatus?: NodeStatus;
   durationMs?: number | null;
   hasValidationError?: boolean;
+  diffBadge?: "added" | "modified" | "removed" | null;
+  isPinned?: boolean;
 }
 
 export type FlowCanvasNode = Node<FlowNodeData, "flowNode">;
@@ -58,6 +60,8 @@ export function canonicalToCanvas(
   catalogByType: Map<string, NodeCatalogEntry>,
   nodeStatuses: Record<string, { status: NodeStatus; duration_ms?: number | null }>,
   errorNodeIds: Set<string>,
+  diffHighlights: Record<string, "added" | "modified" | "removed"> = {},
+  pinnedNodeIds: Set<string> = new Set(),
 ): { nodes: FlowCanvasNode[]; edges: FlowCanvasEdge[] } {
   const nodes: FlowCanvasNode[] = graph.nodes.map((nodeDef, idx) => ({
     id: nodeDef.id,
@@ -69,6 +73,8 @@ export function canonicalToCanvas(
       executionStatus: nodeStatuses[nodeDef.id]?.status,
       durationMs: nodeStatuses[nodeDef.id]?.duration_ms,
       hasValidationError: errorNodeIds.has(nodeDef.id),
+      diffBadge: diffHighlights[nodeDef.id] ?? null,
+      isPinned: pinnedNodeIds.has(nodeDef.id),
     },
   }));
 

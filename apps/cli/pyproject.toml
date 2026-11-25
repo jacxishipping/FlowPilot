@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "flowpilot-cli"
+version = "0.1.0"
+description = "Flow-as-Code GitOps CLI (validate, test, diff, pull, publish) for FlowPilot"
+requires-python = ">=3.12"
+dependencies = [
+    "flowpilot-schema",
+    "flowpilot-validator",
+    "flowpilot-engine",
+    "flowpilot-api",
+    "httpx>=0.28.0",
+]
+
+[project.scripts]
+flowpilot = "flowpilot_cli.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/flowpilot_cli"]

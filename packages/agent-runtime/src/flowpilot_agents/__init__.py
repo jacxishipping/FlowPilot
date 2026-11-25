@@ -1,6 +1,14 @@
 """FlowPilot bounded AI agent runtime, tool gateway, memory, and supervisor teams."""
 
 from flowpilot_agents.gateway import AgentToolGateway, ToolCallable
+from flowpilot_agents.guardrails import (
+    PiiScrubResult,
+    PromptInjectionResult,
+    detect_prompt_injection,
+    scrub_pii,
+    validate_json_output_schema,
+)
+from flowpilot_agents.mcp import McpClientBridge
 from flowpilot_agents.memory import (
     AgentMemoryStore,
     InMemoryVectorMemoryStore,
@@ -42,16 +50,22 @@ __all__ = [
     "EscalationBehavior",
     "GeminiModelProvider",
     "InMemoryVectorMemoryStore",
+    "McpClientBridge",
     "MemoryPolicy",
     "MemoryRecord",
     "MultiModelProvider",
     "OpenAIModelProvider",
+    "PiiScrubResult",
+    "PromptInjectionResult",
     "SqlAlchemyVectorMemoryStore",
     "SupervisorTeamRuntime",
     "ToolCallable",
     "ToolSpec",
     "TraceEntry",
     "cosine_similarity",
+    "detect_prompt_injection",
     "deterministic_embed",
     "estimate_cost_usd",
+    "scrub_pii",
+    "validate_json_output_schema",
 ]

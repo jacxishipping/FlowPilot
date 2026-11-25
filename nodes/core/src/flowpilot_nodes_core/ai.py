@@ -67,6 +67,9 @@ class AiPromptConfig(NodeConfigModel):
     temperature: float = Field(default=0.2, ge=0.0, le=2.0)
     max_tokens: int = Field(default=1024, ge=1, le=128_000)
     max_cost_usd: float = Field(default=1.0, gt=0.0, le=100.0)
+    scrub_pii: bool = False
+    block_prompt_injection: bool = False
+    response_schema: dict[str, Any] | None = None
 
 
 class AiPromptNode(BaseNode[AiPromptConfig, Any]):
@@ -90,10 +93,28 @@ class AiPromptNode(BaseNode[AiPromptConfig, Any]):
                 "No 'model_provider' configured in ExecutionContext.services."
             )
 
+        prompt_text = config.prompt
+        pii_detected: list[str] = []
+        if config.block_prompt_injection:
+            from flowpilot_agents.guardrails import detect_prompt_injection
+
+            inj = detect_prompt_injection(prompt_text)
+            if inj.flagged:
+                raise SecurityPolicyError(
+                    f"Prompt injection detected (rules: {inj.matched_rules}).",
+                    code="PROMPT_INJECTION_BLOCKED",
+                )
+        if config.scrub_pii:
+            from flowpilot_agents.guardrails import scrub_pii
+
+            scrubbed = scrub_pii(prompt_text)
+            prompt_text = scrubbed.scrubbed_text
+            pii_detected = scrubbed.detected_types
+
         messages: list[dict[str, Any]] = []
         if config.system_prompt:
             messages.append({"role": "system", "content": config.system_prompt})
-        messages.append({"role": "user", "content": config.prompt})
+        messages.append({"role": "user", "content": prompt_text})
 
         completion = await provider.complete(
             provider=config.provider,
@@ -110,6 +131,21 @@ class AiPromptNode(BaseNode[AiPromptConfig, Any]):
                 code="AI_BUDGET_EXCEEDED",
             )
 
+        parsed_json: dict[str, Any] | None = None
+        if config.response_schema is not None:
+            from flowpilot_agents.guardrails import validate_json_output_schema
+
+            try:
+                parsed_json = validate_json_output_schema(
+                    completion.content,
+                    config.response_schema,
+                )
+            except ValueError as exc:
+                raise SecurityPolicyError(
+                    f"AI response failed output schema enforcement: {exc}",
+                    code="AI_OUTPUT_SCHEMA_VIOLATION",
+                ) from exc
+
         ctx.record_usage("ai_tokens_input", float(completion.input_tokens), unit="tokens")
         ctx.record_usage("ai_tokens_output", float(completion.output_tokens), unit="tokens")
         ctx.record_usage("ai_cost_usd", float(completion.cost_usd), unit="usd")
@@ -117,6 +153,8 @@ class AiPromptNode(BaseNode[AiPromptConfig, Any]):
         return NodeResult(
             output={
                 "text": completion.content,
+                "json": parsed_json,
+                "pii_redacted": pii_detected,
                 "model": config.model,
                 "provider": config.provider,
                 "usage": {

@@ -27,6 +27,14 @@ from flowpilot_nodes_core.control import (
 )
 from flowpilot_nodes_core.data import SetDataConfig, SetDataNode, TransformConfig, TransformNode
 from flowpilot_nodes_core.http_node import HttpRequestConfig, HttpRequestNode
+from flowpilot_nodes_core.subworkflow import (
+    MAX_SUBWORKFLOW_DEPTH,
+    SubWorkflowConfig,
+    SubWorkflowNode,
+    SubWorkflowRunnerFn,
+    WebhookResponseConfig,
+    WebhookResponseNode,
+)
 from flowpilot_nodes_core.triggers import (
     ManualTriggerConfig,
     ManualTriggerNode,
@@ -47,6 +55,8 @@ CORE_NODES: tuple[type[BaseNode[Any, Any]], ...] = (
     HumanApprovalNode,
     AiPromptNode,
     BoundedAgentNode,
+    SubWorkflowNode,
+    WebhookResponseNode,
 )
 
 CORE_PACKAGE_MANIFEST = NodePackageManifest(
@@ -78,6 +88,7 @@ def create_default_registry() -> NodeRegistry:
 __all__ = [
     "CORE_NODES",
     "CORE_PACKAGE_MANIFEST",
+    "MAX_SUBWORKFLOW_DEPTH",
     "AgentToolCall",
     "AiPromptConfig",
     "AiPromptNode",
@@ -100,9 +111,14 @@ __all__ = [
     "ModelProvider",
     "SetDataConfig",
     "SetDataNode",
+    "SubWorkflowConfig",
+    "SubWorkflowNode",
+    "SubWorkflowRunnerFn",
     "ToolHandler",
     "TransformConfig",
     "TransformNode",
+    "WebhookResponseConfig",
+    "WebhookResponseNode",
     "WebhookTriggerConfig",
     "WebhookTriggerNode",
     "create_default_registry",

@@ -7,8 +7,8 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
-from fastapi.responses import PlainTextResponse
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -213,11 +213,12 @@ async def run_agent(
 async def ingest_signed_webhook(
     workflow_id: UUID,
     request: Request,
+    sync: bool = Query(default=False),
     x_signature: str | None = Header(default=None, alias="X-FlowPilot-Signature"),
     x_timestamp: str | None = Header(default=None, alias="X-FlowPilot-Timestamp"),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     session: AsyncSession = Depends(get_db_session),
-) -> dict[str, Any]:
+) -> Any:
     """Verify HMAC-SHA256 webhook signature and trigger the active pinned workflow version."""
     raw_body = await request.body()
     secret = request.app.state.settings.webhook_signing_secret
@@ -280,6 +281,19 @@ async def ingest_signed_webhook(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     request.app.state.metrics.inc("flowpilot_webhook_runs_total", status=run.status.value)
+
+    # Synchronous webhook response mode: return output of core.webhook_response node directly
+    if sync:
+        for nexec in run.node_executions.values():
+            if nexec.node_type == "core.webhook_response" and nexec.output_ref is not None:
+                out = await engine.payloads.unpack(nexec.output_ref)
+                if isinstance(out, dict) and out.get("_webhook_response"):
+                    return JSONResponse(
+                        status_code=int(out.get("status_code", 200)),
+                        content=out.get("body", {}),
+                        headers={str(k): str(v) for k, v in (out.get("headers") or {}).items()},
+                    )
+
     return {"run_id": str(run.id), "status": run.status.value}
 
 

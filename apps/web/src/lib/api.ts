@@ -272,6 +272,113 @@ export async function listProjectsApi(
   return apiFetch("/api/v1/projects", { apiKey });
 }
 
+export interface WorkflowDiffResult {
+  workflow_id: string;
+  from_version: number;
+  to_version: number;
+  added_nodes: string[];
+  removed_nodes: string[];
+  modified_nodes: Array<{ node_id: string; changed_fields: string[] }>;
+  added_edges: string[];
+  removed_edges: string[];
+}
+
+export interface TemplateSummary {
+  slug: string;
+  name: string;
+  category: string;
+  description: string;
+  tags: string[];
+  node_count: number;
+  graph: WorkflowGraph;
+}
+
+export interface InboxApprovalItem {
+  id: string;
+  run_id: string;
+  node_id: string;
+  title: string;
+  description: string;
+  risk_level: string;
+  decision: string;
+  decided_by?: string | null;
+  comment?: string | null;
+  requested_at: string;
+}
+
+export async function replayRunFromNodeApi(
+  apiKey: string,
+  runId: string,
+  startNodeId: string,
+  pinnedOutputs: Record<string, unknown> = {},
+): Promise<WorkflowRunState> {
+  return apiFetch<WorkflowRunState>(`/api/v1/runs/${runId}/replay`, {
+    method: "POST",
+    apiKey,
+    body: JSON.stringify({
+      start_node_id: startNodeId,
+      pinned_outputs: pinnedOutputs,
+    }),
+  });
+}
+
+export async function diffWorkflowVersionsApi(
+  apiKey: string,
+  workflowId: string,
+  fromVersion: number,
+  toVersion: number,
+): Promise<WorkflowDiffResult> {
+  return apiFetch<WorkflowDiffResult>(
+    `/api/v1/workflows/${workflowId}/diff?from_version=${fromVersion}&to_version=${toVersion}`,
+    { apiKey },
+  );
+}
+
+export async function rollbackWorkflowApi(
+  apiKey: string,
+  workflowId: string,
+  targetVersionNumber: number,
+): Promise<{
+  new_version_number: number;
+  revision: number;
+  definition: WorkflowDefinition;
+}> {
+  return apiFetch(`/api/v1/workflows/${workflowId}/rollback`, {
+    method: "POST",
+    apiKey,
+    body: JSON.stringify({ target_version_number: targetVersionNumber }),
+  });
+}
+
+export async function listApprovalsInboxApi(apiKey: string): Promise<InboxApprovalItem[]> {
+  return apiFetch<InboxApprovalItem[]>("/api/v1/approvals", { apiKey });
+}
+
+export async function generateApprovalActionLinksApi(
+  apiKey: string,
+  approvalId: string,
+): Promise<{ approve_url: string; reject_url: string; slack_blocks: unknown[] }> {
+  return apiFetch(`/api/v1/approvals/${approvalId}/action-links`, {
+    method: "POST",
+    apiKey,
+  });
+}
+
+export async function listTemplatesApi(): Promise<TemplateSummary[]> {
+  return apiFetch<TemplateSummary[]>("/api/v1/templates");
+}
+
+export async function previewExpressionApi(
+  template: string,
+  pinnedNodes: Record<string, unknown>,
+  trigger: Record<string, unknown>,
+): Promise<{ ok: boolean; value: unknown; error: string | null }> {
+  return apiFetch("/api/v1/expressions/preview", {
+    method: "POST",
+    body: JSON.stringify({ template, pinned_nodes: pinnedNodes, trigger }),
+  });
+}
+
 export async function generateWorkflowDraftApi(
   apiKey: string,
   projectId: string,

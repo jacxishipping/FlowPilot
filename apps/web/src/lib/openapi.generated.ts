@@ -7,7 +7,12 @@ export const API_PATHS = {
   "/api/v1/agents": ["GET", "POST"] as const,
   "/api/v1/agents/{agent_id}/runs": ["POST"] as const,
   "/api/v1/ai/workflow-generation": ["POST"] as const,
+  "/api/v1/approvals": ["GET"] as const,
+  "/api/v1/approvals/action": ["GET"] as const,
+  "/api/v1/approvals/{approval_id}/action-links": ["POST"] as const,
   "/api/v1/approvals/{approval_id}/decision": ["POST"] as const,
+  "/api/v1/audit-logs/export": ["GET"] as const,
+  "/api/v1/audit-logs/siem-push": ["POST"] as const,
   "/api/v1/auth/bootstrap": ["POST"] as const,
   "/api/v1/auth/login": ["POST"] as const,
   "/api/v1/auth/logout": ["POST"] as const,
@@ -21,9 +26,12 @@ export const API_PATHS = {
   "/api/v1/billing/webhooks/stripe": ["POST"] as const,
   "/api/v1/credentials": ["GET", "POST"] as const,
   "/api/v1/dlq": ["GET"] as const,
+  "/api/v1/environments": ["GET", "POST"] as const,
+  "/api/v1/expressions/preview": ["POST"] as const,
   "/api/v1/marketplace/packages": ["GET"] as const,
   "/api/v1/marketplace/packages/{package_id}/install": ["POST"] as const,
   "/api/v1/marketplace/submissions": ["POST"] as const,
+  "/api/v1/mcp": ["POST"] as const,
   "/api/v1/nodes/catalog": ["GET"] as const,
   "/api/v1/oauth/{provider}/authorize": ["POST"] as const,
   "/api/v1/oauth/{provider}/callback": ["POST"] as const,
@@ -32,8 +40,15 @@ export const API_PATHS = {
   "/api/v1/runs/{run_id}": ["GET"] as const,
   "/api/v1/runs/{run_id}/cancel": ["POST"] as const,
   "/api/v1/runs/{run_id}/events": ["GET"] as const,
+  "/api/v1/runs/{run_id}/replay": ["POST"] as const,
   "/api/v1/runs/{run_id}/retry": ["POST"] as const,
   "/api/v1/schemas/workflow": ["GET"] as const,
+  "/api/v1/scim/v2/Users": ["GET", "POST"] as const,
+  "/api/v1/scim/v2/Users/{user_id}": ["DELETE"] as const,
+  "/api/v1/sso/oidc/callback": ["POST"] as const,
+  "/api/v1/sso/saml/acs": ["POST"] as const,
+  "/api/v1/templates": ["GET"] as const,
+  "/api/v1/templates/{slug}/clone": ["POST"] as const,
   "/api/v1/usage": ["GET"] as const,
   "/api/v1/webhooks/{workflow_id}": ["POST"] as const,
   "/api/v1/workflows": ["GET", "POST"] as const,
@@ -41,7 +56,11 @@ export const API_PATHS = {
   "/api/v1/workflows/{workflow_id}": ["GET", "PATCH"] as const,
   "/api/v1/workflows/{workflow_id}/activate": ["POST"] as const,
   "/api/v1/workflows/{workflow_id}/deactivate": ["POST"] as const,
+  "/api/v1/workflows/{workflow_id}/diff": ["GET"] as const,
+  "/api/v1/workflows/{workflow_id}/evals/run": ["POST"] as const,
+  "/api/v1/workflows/{workflow_id}/promote": ["POST"] as const,
   "/api/v1/workflows/{workflow_id}/publish": ["POST"] as const,
+  "/api/v1/workflows/{workflow_id}/rollback": ["POST"] as const,
   "/api/v1/workflows/{workflow_id}/runs": ["GET", "POST"] as const,
   "/api/v1/workflows/{workflow_id}/validate": ["POST"] as const,
   "/api/v1/workflows/{workflow_id}/versions": ["GET"] as const,
@@ -128,6 +147,10 @@ export interface OpenApiComponents {
     "success_url"?: string;
     "cancel_url"?: string;
   };
+  "CloneTemplateRequest": {
+    "project_id": string;
+    "name"?: string | null;
+  };
   "CredentialCreateRequest": {
     "name": string;
     "credential_type": string;
@@ -155,7 +178,27 @@ export interface OpenApiComponents {
     "label"?: string | null;
   };
   "EdgeKind": "default" | "true" | "false" | "error";
+  "EnvironmentCreateRequest": {
+    "project_id": string;
+    "name": string;
+    "variables"?: Record<string, unknown>;
+    "credential_map"?: Record<string, unknown>;
+  };
   "EscalationBehavior": "fail" | "escalate_human" | "return_partial";
+  "EvalCase": {
+    "name": string;
+    "trigger_input"?: Record<string, unknown>;
+    "expected_status"?: OpenApiComponents['RunStatus'];
+    "assertions"?: Array<string>;
+    "max_duration_ms"?: number | null;
+    "max_cost_usd"?: number | null;
+    "max_tokens"?: number | null;
+  };
+  "ExpressionPreviewRequest": {
+    "template": string;
+    "pinned_nodes"?: Record<string, unknown>;
+    "trigger"?: Record<string, unknown>;
+  };
   "HTTPValidationError": {
     "detail"?: Array<OpenApiComponents['ValidationError']>;
   };
@@ -193,6 +236,12 @@ export interface OpenApiComponents {
     "manifest": OpenApiComponents['NodePackageManifest'];
     "source_files": Record<string, unknown>;
     "publisher": string;
+  };
+  "McpRpcRequest": {
+    "jsonrpc"?: string;
+    "id"?: number | string | null;
+    "method": string;
+    "params"?: Record<string, unknown>;
   };
   "MemoryPolicy": {
     "enabled"?: boolean;
@@ -264,6 +313,10 @@ export interface OpenApiComponents {
     "client_id": string;
     "client_secret": string;
   };
+  "OidcCallbackRequest": {
+    "id_token": string;
+    "organization_id": string;
+  };
   "OrganizationCreate": {
     "name": string;
     "slug": string;
@@ -296,6 +349,11 @@ export interface OpenApiComponents {
     "description": string;
     "created_at": string;
   };
+  "PromoteWorkflowRequest": {
+    "source_version_number": number;
+    "target_environment_id": string;
+    "changelog"?: string;
+  };
   "PublishWorkflowRequest": {
     "changelog"?: string;
     "activate"?: boolean;
@@ -307,6 +365,11 @@ export interface OpenApiComponents {
     "organization_name": string;
     "organization_slug": string;
   };
+  "ReplayFromNodeRequest": {
+    "start_node_id": string;
+    "config_overrides"?: Record<string, unknown>;
+    "pinned_outputs"?: Record<string, unknown>;
+  };
   "RetryPolicy": {
     "max_attempts"?: number;
     "initial_interval_ms"?: number;
@@ -315,12 +378,37 @@ export interface OpenApiComponents {
     "jitter_ratio"?: number;
     "allow_retry_with_idempotency_key"?: boolean;
   };
+  "Role": "owner" | "admin" | "editor" | "operator" | "viewer";
+  "RollbackRequest": {
+    "target_version_number": number;
+  };
   "RunCreateRequest": {
     "trigger_input"?: Record<string, unknown>;
     "trigger_type"?: string;
     "workflow_version_id"?: string | null;
   };
+  "RunEvalSuiteRequest": {
+    "workflow_version_id"?: string | null;
+    "cases": Array<OpenApiComponents['EvalCase']>;
+  };
+  "RunStatus": "QUEUED" | "RUNNING" | "WAITING_APPROVAL" | "WAITING_RETRY" | "SUCCEEDED" | "FAILED" | "CANCELED" | "TIMED_OUT";
+  "SamlAcsRequest": {
+    "organization_id": string;
+    "assertion_b64": string;
+    "signature": string;
+  };
+  "ScimUserCreate": {
+    "userName": string;
+    "displayName"?: string;
+    "active"?: boolean;
+    "role"?: OpenApiComponents['Role'];
+  };
   "Severity": "error" | "warning";
+  "SiemPushRequest": {
+    "endpoint_url": string;
+    "format"?: string;
+    "limit"?: number;
+  };
   "SwitchOrgRequest": {
     "organization_id": string;
   };

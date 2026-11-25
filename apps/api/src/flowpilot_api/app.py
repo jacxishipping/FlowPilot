@@ -28,6 +28,7 @@ from flowpilot_agents import (
     OpenAIModelProvider,
     SqlAlchemyVectorMemoryStore,
 )
+from flowpilot_api.advanced_routes import advanced_router
 from flowpilot_api.billing_service import StripeBillingClient
 from flowpilot_api.config import Settings
 from flowpilot_api.db.models import MarketplacePackageModel
@@ -37,6 +38,7 @@ from flowpilot_api.db.stores import (
     SqlAlchemyEventSink,
     SqlAlchemyExecutionStore,
 )
+from flowpilot_api.enterprise_routes import enterprise_router
 from flowpilot_api.extras_routes import extras_router
 from flowpilot_api.platform_routes import platform_router
 from flowpilot_api.routes import router as v1_router
@@ -50,6 +52,7 @@ from flowpilot_engine import (
     S3ArtifactStore,
     WorkflowExecutionEngine,
 )
+from flowpilot_nodes_connectors import CONNECTORS_PACKAGE_MANIFEST, register_connector_nodes
 from flowpilot_nodes_core import CORE_PACKAGE_MANIFEST, ModelProvider, create_default_registry
 from flowpilot_nodes_database import DATABASE_PACKAGE_MANIFEST, register_database_nodes
 from flowpilot_nodes_email import EMAIL_PACKAGE_MANIFEST, register_email_nodes
@@ -60,11 +63,12 @@ from flowpilot_worker_code import PythonSandboxNode
 
 
 def build_full_node_registry() -> NodeRegistry:
-    """Create a NodeRegistry populated with all 17 first-party FlowPilot nodes."""
+    """Create a NodeRegistry populated with all 25 first-party FlowPilot nodes."""
     reg = create_default_registry()
     register_email_nodes(reg)
     register_slack_nodes(reg)
     register_database_nodes(reg)
+    register_connector_nodes(reg)
     reg.register(PythonSandboxNode)
     reg.register(BrowserAutomationNode)
     return reg
@@ -75,6 +79,7 @@ FIRST_PARTY_MANIFESTS: tuple[NodePackageManifest, ...] = (
     EMAIL_PACKAGE_MANIFEST,
     SLACK_PACKAGE_MANIFEST,
     DATABASE_PACKAGE_MANIFEST,
+    CONNECTORS_PACKAGE_MANIFEST,
 )
 
 
@@ -262,6 +267,8 @@ def create_app(
             "execution_mode": cfg.execution_mode,
         }
 
+    app.include_router(advanced_router)
+    app.include_router(enterprise_router)
     app.include_router(platform_router)
     app.include_router(v1_router)
     app.include_router(extras_router)

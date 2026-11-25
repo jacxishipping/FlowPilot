@@ -30,7 +30,8 @@ function statusBadgeClass(status?: string): string {
 }
 
 export function FlowNode({ data, selected }: NodeProps<FlowCanvasNode>) {
-  const { nodeDef, catalog, executionStatus, durationMs, hasValidationError } = data;
+  const { nodeDef, catalog, executionStatus, durationMs, hasValidationError, diffBadge, isPinned } =
+    data;
   const category = catalog?.metadata.category ?? "core";
   const accent = CATEGORY_COLORS[category] ?? "#6366f1";
   const isTrigger = catalog?.metadata.kind === "trigger";
@@ -88,6 +89,20 @@ export function FlowNode({ data, selected }: NodeProps<FlowCanvasNode>) {
             <span className="pill pill-info">cred</span>
           )}
           {hasValidationError && <span className="pill pill-danger">invalid</span>}
+          {isPinned && <span className="pill pill-info">pinned</span>}
+          {diffBadge && (
+            <span
+              className={
+                diffBadge === "added"
+                  ? "pill pill-success"
+                  : diffBadge === "modified"
+                    ? "pill pill-warning"
+                    : "pill pill-danger"
+              }
+            >
+              {diffBadge}
+            </span>
+          )}
           {typeof durationMs === "number" && (
             <span style={{ marginLeft: "auto", fontSize: 10, color: "#6c7a96" }}>
               {durationMs}ms
