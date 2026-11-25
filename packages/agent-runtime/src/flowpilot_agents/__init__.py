@@ -1,5 +1,6 @@
 """FlowPilot bounded AI agent runtime, tool gateway, memory, and supervisor teams."""
 
+from flowpilot_agents.builtin_tools import KnowledgeLookupFn, register_builtin_agent_tools
 from flowpilot_agents.gateway import AgentToolGateway, ToolCallable
 from flowpilot_agents.guardrails import (
     PiiScrubResult,
@@ -32,6 +33,7 @@ from flowpilot_agents.providers import (
     AnthropicModelProvider,
     GeminiModelProvider,
     MultiModelProvider,
+    OllamaModelProvider,
     OpenAIModelProvider,
     estimate_cost_usd,
 )
@@ -50,10 +52,12 @@ __all__ = [
     "EscalationBehavior",
     "GeminiModelProvider",
     "InMemoryVectorMemoryStore",
+    "KnowledgeLookupFn",
     "McpClientBridge",
     "MemoryPolicy",
     "MemoryRecord",
     "MultiModelProvider",
+    "OllamaModelProvider",
     "OpenAIModelProvider",
     "PiiScrubResult",
     "PromptInjectionResult",
@@ -66,6 +70,7 @@ __all__ = [
     "detect_prompt_injection",
     "deterministic_embed",
     "estimate_cost_usd",
+    "register_builtin_agent_tools",
     "scrub_pii",
     "validate_json_output_schema",
 ]

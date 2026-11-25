@@ -14,12 +14,17 @@ import {
   type NodeTypes,
 } from "@xyflow/react";
 import {
+  BarChart3,
+  Bot,
   CheckSquare,
+  Database,
+  Download,
   GitCommitHorizontal,
   Inbox,
   LayoutGrid,
   LayoutTemplate,
   LogIn,
+  MessageSquare,
   Moon,
   MoreHorizontal,
   PanelLeft,
@@ -32,6 +37,7 @@ import {
   Sparkles,
   Sun,
   Undo2,
+  Upload,
 } from "lucide-react";
 import {
   FALLBACK_NODE_CATALOG,
@@ -59,8 +65,10 @@ import {
   registerAccountApi,
   replayRunFromNodeApi,
   rollbackWorkflowApi,
+  runAiAssistantApi,
   startWorkflowRunApi,
   submitApprovalDecisionApi,
+  testSingleNodeApi,
   validateWorkflowApi,
 } from "@/lib/api";
 import {
@@ -81,6 +89,7 @@ import type {
   WorkflowRecord,
   WorkflowRunState,
 } from "@/lib/types";
+import { AiAssistantModal } from "./AiAssistantModal";
 import { AiDraftModal } from "./AiDraftModal";
 import { ApprovalInboxModal } from "./ApprovalInboxModal";
 import { AuthModal } from "./AuthModal";
@@ -89,6 +98,7 @@ import { InspectorPanel, type InspectorTab } from "./InspectorPanel";
 import { NodeLibrary } from "./NodeLibrary";
 import { TemplatesModal } from "./TemplatesModal";
 import { VersionHistoryModal, type VersionSummary } from "./VersionHistoryModal";
+import { type HubTab, WorkspaceHubModal } from "./WorkspaceHubModal";
 
 const NODE_TYPES: NodeTypes = { flowNode: FlowNode };
 
@@ -125,6 +135,11 @@ function WorkflowEditorInner() {
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [isCompactViewport, setIsCompactViewport] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [hubModalOpen, setHubModalOpen] = useState(false);
+  const [hubTab, setHubTab] = useState<HubTab>("insights");
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantLoading, setAssistantLoading] = useState(false);
+  const importFileRef = useRef<HTMLInputElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   // Sync theme preference to <html data-theme="...">
@@ -336,18 +351,21 @@ function WorkflowEditorInner() {
     }));
   }, []);
 
+  const ensureSession = useCallback(async (): Promise<BootstrapSession> => {
+    if (session) return session;
+    const slug = `studio-${Date.now().toString(36)}`;
+    const sess = await bootstrapDevTenant(slug);
+    setSession(sess);
+    const creds = await listCredentialsApi(sess.api_key);
+    setCredentials(creds);
+    return sess;
+  }, [session]);
+
   const ensureConnectedWorkflow = useCallback(async (): Promise<{
     sess: BootstrapSession;
     wf: WorkflowRecord;
   }> => {
-    let sess = session;
-    if (!sess) {
-      const slug = `studio-${Date.now().toString(36)}`;
-      sess = await bootstrapDevTenant(slug);
-      setSession(sess);
-      const creds = await listCredentialsApi(sess.api_key);
-      setCredentials(creds);
-    }
+    const sess = await ensureSession();
 
     let wf = workflowRecord;
     if (!wf) {
@@ -935,6 +953,91 @@ function WorkflowEditorInner() {
                 >
                   <Redo2 size={14} /> Redo
                 </button>
+                <button
+                  type="button"
+                  className="menu-item"
+                  onClick={() => {
+                    setMoreMenuOpen(false);
+                    setAssistantOpen(true);
+                  }}
+                >
+                  <Bot size={14} /> AI Assistant
+                </button>
+                <button
+                  type="button"
+                  className="menu-item"
+                  onClick={async () => {
+                    setMoreMenuOpen(false);
+                    try {
+                      await ensureSession();
+                    } catch {
+                      // offline fallback
+                    }
+                    setHubTab("insights");
+                    setHubModalOpen(true);
+                  }}
+                >
+                  <BarChart3 size={14} /> Insights &amp; Hub
+                </button>
+                <button
+                  type="button"
+                  className="menu-item"
+                  onClick={async () => {
+                    setMoreMenuOpen(false);
+                    try {
+                      await ensureSession();
+                    } catch {
+                      // offline fallback
+                    }
+                    setHubTab("tables");
+                    setHubModalOpen(true);
+                  }}
+                >
+                  <Database size={14} /> Data Tables &amp; RAG
+                </button>
+                {workflowRecord && (
+                  <button
+                    type="button"
+                    className="menu-item"
+                    onClick={() => {
+                      setMoreMenuOpen(false);
+                      window.open(`/chat/${workflowRecord.id}`, "_blank", "noopener");
+                    }}
+                  >
+                    <MessageSquare size={14} /> Open Hosted Chat
+                  </button>
+                )}
+                <div className="menu-sep" />
+                <button
+                  type="button"
+                  className="menu-item"
+                  onClick={() => {
+                    setMoreMenuOpen(false);
+                    const blob = new Blob(
+                      [JSON.stringify({ name: workflowName, graph }, null, 2)],
+                      { type: "application/json" },
+                    );
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `${workflowName.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "workflow"}.flowpilot.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    setStatusBanner("Exported workflow JSON");
+                  }}
+                >
+                  <Download size={14} /> Export JSON
+                </button>
+                <button
+                  type="button"
+                  className="menu-item"
+                  onClick={() => {
+                    setMoreMenuOpen(false);
+                    importFileRef.current?.click();
+                  }}
+                >
+                  <Upload size={14} /> Import JSON
+                </button>
                 <div className="menu-sep" />
                 <button
                   type="button"
@@ -1114,6 +1217,29 @@ function WorkflowEditorInner() {
             setActiveTab("configure");
           }}
           onRunWorkflow={handleRun}
+          onTestNode={async (nodeDef) => {
+            const sess = await ensureSession();
+            let parsedTrigger: Record<string, unknown> = {};
+            try {
+              parsedTrigger = JSON.parse(triggerInputJson || "{}");
+            } catch {
+              parsedTrigger = {};
+            }
+            const res = await testSingleNodeApi(sess.api_key, {
+              node_id: nodeDef.id,
+              node_type: nodeDef.type,
+              config: nodeDef.config,
+              credentials: nodeDef.credentials,
+              pinned_nodes: pinnedOutputs,
+              trigger: parsedTrigger,
+            });
+            setStatusBanner(
+              res.ok
+                ? `Tested node '${nodeDef.id}' in ${res.duration_ms}ms`
+                : `Test failed on '${nodeDef.id}': ${res.error}`,
+            );
+            return res;
+          }}
           onReplayFromNode={handleReplayFromNode}
           pinnedOutputs={pinnedOutputs}
           onPinNodeOutput={(nid, out) => {
@@ -1176,6 +1302,65 @@ function WorkflowEditorInner() {
         onGenerateLinks={async (id) => {
           if (!session) throw new Error("Sign in first");
           return generateApprovalActionLinksApi(session.api_key, id);
+        }}
+      />
+
+      <WorkspaceHubModal
+        open={hubModalOpen}
+        initialTab={hubTab}
+        apiKey={session?.api_key ?? null}
+        onClose={() => setHubModalOpen(false)}
+        onConnectorsImported={async () => {
+          const updatedCatalog = await fetchNodeCatalog();
+          if (updatedCatalog.length > 0) setCatalog(updatedCatalog);
+        }}
+      />
+
+      <AiAssistantModal
+        open={assistantOpen}
+        loading={assistantLoading}
+        onClose={() => setAssistantOpen(false)}
+        onSend={async (msg) => {
+          setAssistantLoading(true);
+          try {
+            const sess = await ensureSession();
+            const res = await runAiAssistantApi(sess.api_key, {
+              message: msg,
+              graph,
+              workflow_name: workflowName,
+            });
+            if (res.modified) {
+              commitGraph(() => res.graph);
+              setValidation(res.validation);
+              setStatusBanner("AI Assistant updated canvas graph");
+            }
+            return res.reply;
+          } finally {
+            setAssistantLoading(false);
+          }
+        }}
+      />
+
+      <input
+        ref={importFileRef}
+        type="file"
+        accept="application/json,.json"
+        style={{ display: "none" }}
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          try {
+            const parsed = JSON.parse(await file.text());
+            const importedGraph: WorkflowGraph = parsed.graph ?? parsed.definition?.graph;
+            if (!importedGraph?.nodes) throw new Error("Invalid workflow JSON");
+            if (parsed.name) setWorkflowName(String(parsed.name));
+            commitGraph(() => importedGraph);
+            setStatusBanner(`Imported '${file.name}' (${importedGraph.nodes.length} nodes)`);
+          } catch (err) {
+            setStatusBanner(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
+          } finally {
+            e.target.value = "";
+          }
         }}
       />
     </div>

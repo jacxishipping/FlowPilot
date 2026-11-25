@@ -25,8 +25,10 @@ from flowpilot_agents import (
     AnthropicModelProvider,
     GeminiModelProvider,
     MultiModelProvider,
+    OllamaModelProvider,
     OpenAIModelProvider,
     SqlAlchemyVectorMemoryStore,
+    register_builtin_agent_tools,
 )
 from flowpilot_api.advanced_routes import advanced_router
 from flowpilot_api.billing_service import StripeBillingClient
@@ -40,6 +42,11 @@ from flowpilot_api.db.stores import (
 )
 from flowpilot_api.enterprise_routes import enterprise_router
 from flowpilot_api.extras_routes import extras_router
+from flowpilot_api.parity_routes import (
+    build_data_table_service,
+    build_knowledge_search_service,
+    parity_router,
+)
 from flowpilot_api.platform_routes import platform_router
 from flowpilot_api.routes import router as v1_router
 from flowpilot_api.temporal_dispatch import TemporalDispatchClient
@@ -63,7 +70,7 @@ from flowpilot_worker_code import PythonSandboxNode
 
 
 def build_full_node_registry() -> NodeRegistry:
-    """Create a NodeRegistry populated with all 25 first-party FlowPilot nodes."""
+    """Create a NodeRegistry populated with all 49 first-party FlowPilot nodes."""
     reg = create_default_registry()
     register_email_nodes(reg)
     register_slack_nodes(reg)
@@ -91,6 +98,8 @@ def _build_default_model_provider(cfg: Settings) -> ModelProvider | None:
         providers["anthropic"] = AnthropicModelProvider(api_key=cfg.anthropic_api_key)
     if cfg.gemini_api_key:
         providers["gemini"] = GeminiModelProvider(api_key=cfg.gemini_api_key)
+    if cfg.ollama_base_url:
+        providers["ollama"] = OllamaModelProvider(base_url=cfg.ollama_base_url)
     return MultiModelProvider(providers) if providers else None
 
 
@@ -141,9 +150,13 @@ def create_app(
     payload_manager = PayloadManager(artifact_store=artifact_store)
 
     resolved_model_provider = agent_model_provider or _build_default_model_provider(cfg)
+    data_table_service = build_data_table_service(session_factory)
+    knowledge_search_service = build_knowledge_search_service(session_factory)
     engine_services = dict(services or {})
     if resolved_model_provider is not None and "model_provider" not in engine_services:
         engine_services["model_provider"] = resolved_model_provider
+    engine_services.setdefault("data_table_service", data_table_service)
+    engine_services.setdefault("knowledge_search", knowledge_search_service)
 
     workflow_engine = WorkflowExecutionEngine(
         registry=node_registry,
@@ -213,13 +226,18 @@ def create_app(
     app.state.dlq = dlq
     app.state.credential_resolver = cred_resolver
     app.state.engine = workflow_engine
+    app.state.artifact_store = artifact_store
     app.state.metrics = metrics
     app.state.billing_client = billing_client
     app.state.temporal_dispatch = temporal_dispatch
     app.state.marketplace_pipeline = marketplace_pipeline
     app.state.oauth_http_transport = oauth_http_transport
     app.state.agent_model_provider = resolved_model_provider
-    app.state.tool_gateway = tool_gateway or AgentToolGateway()
+    resolved_tool_gateway = tool_gateway or AgentToolGateway()
+    register_builtin_agent_tools(resolved_tool_gateway, http_transport=http_transport)
+    app.state.tool_gateway = resolved_tool_gateway
+    app.state.data_table_service = data_table_service
+    app.state.knowledge_search_service = knowledge_search_service
     app.state.memory_store = SqlAlchemyVectorMemoryStore(session_factory)
 
     app.add_middleware(
@@ -268,6 +286,7 @@ def create_app(
             "execution_mode": cfg.execution_mode,
         }
 
+    app.include_router(parity_router)
     app.include_router(advanced_router)
     app.include_router(enterprise_router)
     app.include_router(platform_router)

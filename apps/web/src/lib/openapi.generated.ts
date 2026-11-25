@@ -6,6 +6,7 @@ export const OPENAPI_VERSION = "0.1.0" as const;
 export const API_PATHS = {
   "/api/v1/agents": ["GET", "POST"] as const,
   "/api/v1/agents/{agent_id}/runs": ["POST"] as const,
+  "/api/v1/ai/assistant": ["POST"] as const,
   "/api/v1/ai/workflow-generation": ["POST"] as const,
   "/api/v1/approvals": ["GET"] as const,
   "/api/v1/approvals/action": ["GET"] as const,
@@ -24,15 +25,27 @@ export const API_PATHS = {
   "/api/v1/billing/reconcile": ["POST"] as const,
   "/api/v1/billing/summary": ["GET"] as const,
   "/api/v1/billing/webhooks/stripe": ["POST"] as const,
+  "/api/v1/chat/{workflow_id}/messages": ["POST"] as const,
+  "/api/v1/chat/{workflow_id}/sessions/{session_id}": ["GET"] as const,
+  "/api/v1/connectors/openapi/import": ["POST"] as const,
   "/api/v1/credentials": ["GET", "POST"] as const,
   "/api/v1/dlq": ["GET"] as const,
   "/api/v1/environments": ["GET", "POST"] as const,
   "/api/v1/expressions/preview": ["POST"] as const,
+  "/api/v1/files": ["GET"] as const,
+  "/api/v1/files/upload": ["POST"] as const,
+  "/api/v1/files/{file_id}/download": ["GET"] as const,
+  "/api/v1/folders": ["GET", "POST"] as const,
+  "/api/v1/folders/{folder_id}": ["DELETE"] as const,
+  "/api/v1/insights": ["GET"] as const,
+  "/api/v1/knowledge/documents": ["GET", "POST"] as const,
+  "/api/v1/knowledge/search": ["POST"] as const,
   "/api/v1/marketplace/packages": ["GET"] as const,
   "/api/v1/marketplace/packages/{package_id}/install": ["POST"] as const,
   "/api/v1/marketplace/submissions": ["POST"] as const,
   "/api/v1/mcp": ["POST"] as const,
   "/api/v1/nodes/catalog": ["GET"] as const,
+  "/api/v1/nodes/test": ["POST"] as const,
   "/api/v1/oauth/{provider}/authorize": ["POST"] as const,
   "/api/v1/oauth/{provider}/callback": ["POST"] as const,
   "/api/v1/organizations": ["GET", "POST"] as const,
@@ -47,6 +60,9 @@ export const API_PATHS = {
   "/api/v1/scim/v2/Users/{user_id}": ["DELETE"] as const,
   "/api/v1/sso/oidc/callback": ["POST"] as const,
   "/api/v1/sso/saml/acs": ["POST"] as const,
+  "/api/v1/tables": ["GET", "POST"] as const,
+  "/api/v1/tables/{table_id}/rows": ["GET", "POST"] as const,
+  "/api/v1/tables/{table_id}/rows/{row_id}": ["DELETE"] as const,
   "/api/v1/templates": ["GET"] as const,
   "/api/v1/templates/{slug}/clone": ["POST"] as const,
   "/api/v1/usage": ["GET"] as const,
@@ -121,9 +137,19 @@ export interface OpenApiComponents {
     "task_input"?: string | null;
     "approved_tools"?: Array<string>;
   };
+  "AiAssistantRequest": {
+    "message": string;
+    "graph": OpenApiComponents['WorkflowGraph-Input'];
+    "workflow_name"?: string;
+  };
   "ApprovalDecisionRequest": {
     "approved": boolean;
     "comment"?: string;
+  };
+  "BinaryFileUploadRequest": {
+    "filename": string;
+    "mime_type"?: string;
+    "content_base64": string;
   };
   "BootstrapRequest": {
     "email": string;
@@ -141,6 +167,10 @@ export interface OpenApiComponents {
     "project_id": string;
     "api_key": string;
     "api_key_prefix": string;
+  };
+  "ChatMessageIn": {
+    "message": string;
+    "session_id"?: string | null;
   };
   "CheckoutRequest": {
     "plan": OpenApiComponents['PlanTier'];
@@ -167,6 +197,14 @@ export interface OpenApiComponents {
     "metadata": Record<string, unknown>;
     "scopes": Array<string>;
     "created_at": string;
+  };
+  "DataTableCreateRequest": {
+    "name": string;
+    "description"?: string;
+    "columns_schema"?: Array<Record<string, unknown>>;
+  };
+  "DataTableRowRequest": {
+    "data"?: Record<string, unknown>;
   };
   "EdgeDefinition": {
     "id": string;
@@ -199,8 +237,24 @@ export interface OpenApiComponents {
     "pinned_nodes"?: Record<string, unknown>;
     "trigger"?: Record<string, unknown>;
   };
+  "FolderCreateRequest": {
+    "project_id": string;
+    "name": string;
+    "parent_id"?: string | null;
+  };
   "HTTPValidationError": {
     "detail"?: Array<OpenApiComponents['ValidationError']>;
+  };
+  "KnowledgeDocCreateRequest": {
+    "title": string;
+    "content": string;
+    "collection"?: string;
+    "mime_type"?: string;
+  };
+  "KnowledgeSearchRequest": {
+    "query": string;
+    "top_k"?: number;
+    "collection"?: string | null;
   };
   "LoginRequest": {
     "email": string;
@@ -317,6 +371,12 @@ export interface OpenApiComponents {
     "id_token": string;
     "organization_id": string;
   };
+  "OpenApiImportRequest": {
+    "prefix": string;
+    "base_url"?: string | null;
+    "spec": Record<string, unknown>;
+    "max_operations"?: number;
+  };
   "OrganizationCreate": {
     "name": string;
     "slug": string;
@@ -408,6 +468,14 @@ export interface OpenApiComponents {
     "endpoint_url": string;
     "format"?: string;
     "limit"?: number;
+  };
+  "SingleNodeTestRequest": {
+    "node_id"?: string;
+    "node_type": string;
+    "config"?: Record<string, unknown>;
+    "credentials"?: Record<string, unknown>;
+    "pinned_nodes"?: Record<string, unknown>;
+    "trigger"?: Record<string, unknown>;
   };
   "SwitchOrgRequest": {
     "organization_id": string;

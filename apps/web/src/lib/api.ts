@@ -385,6 +385,189 @@ export async function previewExpressionApi(
   });
 }
 
+export interface SingleNodeTestResult {
+  ok: boolean;
+  node_id: string;
+  resolved_input: unknown;
+  output: unknown;
+  branch?: string | null;
+  duration_ms: number;
+  logs: Array<{ level: string; message: string; fields: Record<string, unknown> }>;
+  error: string | null;
+}
+
+export async function testSingleNodeApi(
+  apiKey: string,
+  payload: {
+    node_id: string;
+    node_type: string;
+    config: Record<string, unknown>;
+    credentials: Record<string, string>;
+    pinned_nodes: Record<string, unknown>;
+    trigger: Record<string, unknown>;
+  },
+): Promise<SingleNodeTestResult> {
+  return apiFetch<SingleNodeTestResult>("/api/v1/nodes/test", {
+    method: "POST",
+    apiKey,
+    body: JSON.stringify(payload),
+  });
+}
+
+export interface WorkspaceInsights {
+  total_runs: number;
+  succeeded_runs: number;
+  failed_runs: number;
+  waiting_approval_runs: number;
+  success_rate_pct: number;
+  avg_duration_ms: number;
+  p95_duration_ms: number;
+  total_ai_tokens: number;
+  total_ai_cost_usd: number;
+  estimated_hours_saved: number;
+}
+
+export async function getInsightsApi(apiKey: string): Promise<WorkspaceInsights> {
+  return apiFetch<WorkspaceInsights>("/api/v1/insights", { apiKey });
+}
+
+export interface DataTableSummary {
+  id: string;
+  name: string;
+  description: string;
+  columns_schema: Array<Record<string, unknown>>;
+  created_at: string;
+}
+
+export interface DataTableRowItem {
+  id: string;
+  data: Record<string, unknown>;
+  created_at: string;
+}
+
+export async function listDataTablesApi(apiKey: string): Promise<DataTableSummary[]> {
+  return apiFetch<DataTableSummary[]>("/api/v1/tables", { apiKey });
+}
+
+export async function createDataTableApi(
+  apiKey: string,
+  name: string,
+  description = "",
+): Promise<DataTableSummary> {
+  return apiFetch<DataTableSummary>("/api/v1/tables", {
+    method: "POST",
+    apiKey,
+    body: JSON.stringify({ name, description }),
+  });
+}
+
+export async function listTableRowsApi(
+  apiKey: string,
+  tableId: string,
+): Promise<DataTableRowItem[]> {
+  return apiFetch<DataTableRowItem[]>(`/api/v1/tables/${tableId}/rows`, { apiKey });
+}
+
+export async function insertTableRowApi(
+  apiKey: string,
+  tableId: string,
+  data: Record<string, unknown>,
+): Promise<DataTableRowItem> {
+  return apiFetch<DataTableRowItem>(`/api/v1/tables/${tableId}/rows`, {
+    method: "POST",
+    apiKey,
+    body: JSON.stringify({ data }),
+  });
+}
+
+export async function deleteTableRowApi(
+  apiKey: string,
+  tableId: string,
+  rowId: string,
+): Promise<void> {
+  await apiFetch(`/api/v1/tables/${tableId}/rows/${rowId}`, { method: "DELETE", apiKey });
+}
+
+export interface KnowledgeDocSummary {
+  id: string;
+  title: string;
+  collection: string;
+  mime_type: string;
+  chunk_count: number;
+  created_at: string;
+}
+
+export async function listKnowledgeDocsApi(apiKey: string): Promise<KnowledgeDocSummary[]> {
+  return apiFetch<KnowledgeDocSummary[]>("/api/v1/knowledge/documents", { apiKey });
+}
+
+export async function ingestKnowledgeDocApi(
+  apiKey: string,
+  payload: { title: string; content: string; collection?: string },
+): Promise<{ id: string; title: string; chunk_count: number }> {
+  return apiFetch("/api/v1/knowledge/documents", {
+    method: "POST",
+    apiKey,
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function searchKnowledgeApi(
+  apiKey: string,
+  query: string,
+  topK = 5,
+): Promise<{
+  query: string;
+  count: number;
+  chunks: Array<{ chunk_id: string; score: number; content: string; collection: string }>;
+}> {
+  return apiFetch("/api/v1/knowledge/search", {
+    method: "POST",
+    apiKey,
+    body: JSON.stringify({ query, top_k: topK }),
+  });
+}
+
+export async function runAiAssistantApi(
+  apiKey: string,
+  payload: { message: string; graph: WorkflowGraph; workflow_name: string },
+): Promise<{
+  reply: string;
+  modified: boolean;
+  graph: WorkflowGraph;
+  validation: ValidationResult;
+}> {
+  return apiFetch("/api/v1/ai/assistant", {
+    method: "POST",
+    apiKey,
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function importOpenApiConnectorApi(
+  apiKey: string,
+  payload: { prefix: string; spec: Record<string, unknown>; base_url?: string },
+): Promise<{ prefix: string; registered_count: number; node_types: string[] }> {
+  return apiFetch("/api/v1/connectors/openapi/import", {
+    method: "POST",
+    apiKey,
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function sendChatMessageApi(
+  apiKey: string,
+  workflowId: string,
+  message: string,
+  sessionId?: string | null,
+): Promise<{ session_id: string; run_id: string; status: string; reply: string; output: unknown }> {
+  return apiFetch(`/api/v1/chat/${workflowId}/messages`, {
+    method: "POST",
+    apiKey,
+    body: JSON.stringify({ message, session_id: sessionId ?? null }),
+  });
+}
+
 export async function generateWorkflowDraftApi(
   apiKey: string,
   projectId: string,

@@ -24,6 +24,7 @@ from flowpilot.errors import (
 from flowpilot.http import ControlledHttpClient, HttpResponseData, validate_outbound_url
 from flowpilot.manifest import NodePackageManifest
 from flowpilot.node import BaseNode, NodeMetadata, NodeRegistry
+from flowpilot.openapi_generator import generate_nodes_from_openapi
 from flowpilot.scanner import (
     MarketplaceSubmissionPipeline,
     PackageScanReport,
@@ -84,6 +85,7 @@ __all__ = [
     "SecurityPolicyError",
     "SideEffectIdempotencyError",
     "compute_manifest_digest",
+    "generate_nodes_from_openapi",
     "generate_signing_keypair",
     "redact_text",
     "redact_value",

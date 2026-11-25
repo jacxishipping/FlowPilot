@@ -290,8 +290,82 @@ class GeminiModelProvider:
         )
 
 
+class OllamaModelProvider:
+    """Offline / self-hosted Ollama Chat & Embeddings adapter ($0 API cost)."""
+
+    def __init__(
+        self,
+        *,
+        base_url: str | None = None,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
+        self._base_url = (
+            base_url or os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+        ).rstrip("/")
+        self._transport = transport
+
+    async def complete(
+        self,
+        *,
+        provider: str,
+        model: str,
+        messages: list[dict[str, Any]],
+        tools: list[str] | None = None,
+        temperature: float = 0.2,
+        max_tokens: int = 1024,
+    ) -> ModelCompletion:
+        body: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "stream": False,
+            "options": {"temperature": temperature, "num_predict": max_tokens},
+        }
+        if tools:
+            body["tools"] = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": name,
+                        "parameters": {"type": "object", "properties": {}},
+                    },
+                }
+                for name in tools
+            ]
+
+        async with httpx.AsyncClient(timeout=60.0, transport=self._transport) as client:
+            resp = await client.post(f"{self._base_url}/api/chat", json=body)
+        _raise_for_provider_status("ollama", resp)
+        data = resp.json()
+        msg = data.get("message", {})
+        parsed_calls: list[AgentToolCall] = []
+        for tc in msg.get("tool_calls") or []:
+            fn = tc.get("function", {})
+            raw_args = fn.get("arguments", {})
+            args = json.loads(raw_args) if isinstance(raw_args, str) else dict(raw_args)
+            parsed_calls.append(AgentToolCall(tool_name=str(fn.get("name", "")), arguments=args))
+
+        return ModelCompletion(
+            content=str(msg.get("content") or ""),
+            tool_calls=tuple(parsed_calls),
+            input_tokens=int(data.get("prompt_eval_count", 0)),
+            output_tokens=int(data.get("eval_count", 0)),
+            cost_usd=0.0,
+            finish_reason=str(data.get("done_reason", "stop")),
+        )
+
+    async def embed(self, *, model: str, text: str) -> list[float]:
+        async with httpx.AsyncClient(timeout=30.0, transport=self._transport) as client:
+            resp = await client.post(
+                f"{self._base_url}/api/embeddings",
+                json={"model": model, "prompt": text},
+            )
+        _raise_for_provider_status("ollama", resp)
+        vec = resp.json().get("embedding", [])
+        return [float(x) for x in vec] if isinstance(vec, list) else []
+
+
 class MultiModelProvider:
-    """Routes ModelProvider calls by provider name ('openai', 'anthropic', 'gemini')."""
+    """Routes ModelProvider calls by provider name ('openai', 'anthropic', 'gemini', 'ollama')."""
 
     def __init__(self, providers: dict[str, ModelProvider]) -> None:
         self._providers = {k.lower(): v for k, v in providers.items()}

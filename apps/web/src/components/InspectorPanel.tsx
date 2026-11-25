@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { CheckCircle2, KeyRound, Play, ShieldAlert, Sparkles, Trash2, X, XCircle } from "lucide-react";
-import { previewExpressionApi } from "@/lib/api";
+import { type SingleNodeTestResult, previewExpressionApi } from "@/lib/api";
 import type {
   CredentialMeta,
   EdgeDefinition,
@@ -38,6 +38,7 @@ interface InspectorPanelProps {
   onDeleteEdge: (edgeId: string) => void;
   onSelectNodeId: (nodeId: string) => void;
   onRunWorkflow: () => void;
+  onTestNode: (node: NodeDefinition) => Promise<SingleNodeTestResult>;
   onReplayFromNode: (nodeId: string) => void;
   pinnedOutputs: Record<string, unknown>;
   onPinNodeOutput: (nodeId: string, output: unknown) => void;
@@ -68,6 +69,7 @@ export function InspectorPanel({
   onDeleteEdge,
   onSelectNodeId,
   onRunWorkflow,
+  onTestNode,
   onReplayFromNode,
   pinnedOutputs,
   onPinNodeOutput,
@@ -134,6 +136,8 @@ export function InspectorPanel({
                 pinnedOutputs={pinnedOutputs}
                 triggerInputJson={triggerInputJson}
                 credentials={credentials}
+                onTestNode={onTestNode}
+                onPinOutput={(out) => onPinNodeOutput(selectedNode.id, out)}
                 onUpdate={(updater) => onUpdateNode(selectedNode.id, updater)}
                 onDelete={() => onDeleteNode(selectedNode.id)}
               />
@@ -525,6 +529,8 @@ function NodeConfigEditor({
   pinnedOutputs,
   triggerInputJson,
   credentials,
+  onTestNode,
+  onPinOutput,
   onUpdate,
   onDelete,
 }: {
@@ -534,6 +540,8 @@ function NodeConfigEditor({
   pinnedOutputs: Record<string, unknown>;
   triggerInputJson: string;
   credentials: CredentialMeta[];
+  onTestNode: (n: NodeDefinition) => Promise<SingleNodeTestResult>;
+  onPinOutput: (output: unknown) => void;
   onUpdate: (updater: (n: NodeDefinition) => NodeDefinition) => void;
   onDelete: () => void;
 }) {
@@ -542,6 +550,8 @@ function NodeConfigEditor({
   const credReqs = catalogEntry?.metadata.credentials ?? [];
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const [previewExpr, setPreviewExpr] = useState("");
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<SingleNodeTestResult | null>(null);
   const [previewResult, setPreviewResult] = useState<{
     ok: boolean;
     value: unknown;
@@ -618,17 +628,71 @@ function NodeConfigEditor({
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
+        <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 700, fontSize: 13 }}>{node.name || node.id}</div>
-          <div style={{ fontSize: 10, fontFamily: "monospace", color: "var(--text-muted)" }}>
+          <div style={{ fontSize: 10, fontFamily: "var(--font-mono), monospace", color: "var(--text-muted)" }}>
             {node.type}
           </div>
         </div>
-        <button className="btn btn-danger" style={{ height: 26 }} onClick={onDelete}>
-          <Trash2 size={12} />
-        </button>
+        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            disabled={testing}
+            onClick={async () => {
+              setTesting(true);
+              try {
+                const res = await onTestNode(node);
+                setTestResult(res);
+              } finally {
+                setTesting(false);
+              }
+            }}
+            title="Execute only this node with pinned upstream data"
+          >
+            <Play size={11} /> {testing ? "Running..." : "Test Step"}
+          </button>
+          <button type="button" className="btn btn-danger btn-sm" onClick={onDelete}>
+            <Trash2 size={12} />
+          </button>
+        </div>
       </div>
+
+      {testResult && testResult.node_id === node.id && (
+        <div className="surface-card" style={{ marginTop: 10, padding: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+            <span className={testResult.ok ? "pill pill-success" : "pill pill-danger"}>
+              {testResult.ok ? `OK · ${testResult.duration_ms}ms` : "Failed"}
+            </span>
+            {testResult.ok && (
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => onPinOutput(testResult.output)}
+              >
+                Pin Output
+              </button>
+            )}
+          </div>
+          {testResult.error ? (
+            <div style={{ fontSize: 11, color: "var(--danger)" }}>{testResult.error}</div>
+          ) : (
+            <pre
+              style={{
+                margin: 0,
+                fontSize: 10.5,
+                maxHeight: 140,
+                overflow: "auto",
+                fontFamily: "var(--font-mono), monospace",
+                color: "var(--text-primary)",
+              }}
+            >
+              {JSON.stringify(testResult.output, null, 2)}
+            </pre>
+          )}
+        </div>
+      )}
 
       <div className="section-title">Node Identity</div>
       <div className="field-group">

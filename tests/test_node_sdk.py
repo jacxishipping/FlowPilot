@@ -126,7 +126,7 @@ async def test_http_client_ssrf_domain_redirect_and_size_protections() -> None:
 def test_registry_catalog_and_core_manifest() -> None:
     registry = create_default_registry()
     catalog = registry.export_catalog()
-    assert len(catalog) == 14
+    assert len(catalog) == 26
     types = {entry["metadata"]["type"] for entry in catalog}
     assert "core.manual_trigger" in types
     assert "core.http_request" in types
@@ -134,5 +134,9 @@ def test_registry_catalog_and_core_manifest() -> None:
     assert "core.bounded_agent" in types
     assert "core.subworkflow" in types
     assert "core.webhook_response" in types
+    assert "core.switch" in types
+    assert "core.js_code" in types
+    assert "core.data_table" in types
+    assert "core.knowledge_search" in types
     assert CORE_PACKAGE_MANIFEST.first_party is True
     assert set(CORE_PACKAGE_MANIFEST.entrypoints.keys()) == types
