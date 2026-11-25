@@ -24,6 +24,7 @@ members = [
     "flowpilot-scheduler",
     "flowpilot-schema",
     "flowpilot-validator",
+    "flowpilot-worker-browser",
     "flowpilot-worker-code",
     "flowpilot-worker-workflow",
 ]
@@ -421,6 +422,7 @@ dependencies = [
     { name = "flowpilot-scheduler" },
     { name = "flowpilot-schema" },
     { name = "flowpilot-validator" },
+    { name = "flowpilot-worker-browser" },
     { name = "flowpilot-worker-code" },
     { name = "flowpilot-worker-workflow" },
 ]
@@ -451,6 +453,7 @@ requires-dist = [
     { name = "flowpilot-scheduler", editable = "apps/scheduler" },
     { name = "flowpilot-schema", editable = "packages/workflow-schema" },
     { name = "flowpilot-validator", editable = "packages/workflow-validator" },
+    { name = "flowpilot-worker-browser", editable = "apps/workers/browser" },
     { name = "flowpilot-worker-code", editable = "apps/workers/code" },
     { name = "flowpilot-worker-workflow", editable = "apps/workers/workflow" },
 ]
@@ -473,7 +476,9 @@ dependencies = [
     { name = "flowpilot-nodes-core" },
     { name = "flowpilot-policy" },
     { name = "flowpilot-schema" },
+    { name = "httpx" },
     { name = "pydantic" },
+    { name = "sqlalchemy", extra = ["asyncio"] },
 ]
 
 [package.metadata]
@@ -482,7 +487,9 @@ requires-dist = [
     { name = "flowpilot-nodes-core", editable = "nodes/core" },
     { name = "flowpilot-policy", editable = "packages/policy-engine" },
     { name = "flowpilot-schema", editable = "packages/workflow-schema" },
+    { name = "httpx", specifier = ">=0.28.0" },
     { name = "pydantic", specifier = ">=2.10.0" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.36" },
 ]
 
 [[package]]
@@ -506,6 +513,8 @@ dependencies = [
     { name = "flowpilot-policy" },
     { name = "flowpilot-schema" },
     { name = "flowpilot-validator" },
+    { name = "flowpilot-worker-browser" },
+    { name = "flowpilot-worker-code" },
     { name = "httpx" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -531,6 +540,8 @@ requires-dist = [
     { name = "flowpilot-policy", editable = "packages/policy-engine" },
     { name = "flowpilot-schema", editable = "packages/workflow-schema" },
     { name = "flowpilot-validator", editable = "packages/workflow-validator" },
+    { name = "flowpilot-worker-browser", editable = "apps/workers/browser" },
+    { name = "flowpilot-worker-code", editable = "apps/workers/code" },
     { name = "httpx", specifier = ">=0.28.0" },
     { name = "pydantic", specifier = ">=2.10.0" },
     { name = "pydantic-settings", specifier = ">=2.6.0" },
@@ -736,6 +747,23 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "flowpilot-expressions", editable = "packages/expression-engine" },
+    { name = "flowpilot-node-sdk", editable = "packages/node-sdk" },
+    { name = "flowpilot-schema", editable = "packages/workflow-schema" },
+    { name = "pydantic", specifier = ">=2.10.0" },
+]
+
+[[package]]
+name = "flowpilot-worker-browser"
+version = "0.1.0"
+source = { editable = "apps/workers/browser" }
+dependencies = [
+    { name = "flowpilot-node-sdk" },
+    { name = "flowpilot-schema" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
     { name = "flowpilot-node-sdk", editable = "packages/node-sdk" },
     { name = "flowpilot-schema", editable = "packages/workflow-schema" },
     { name = "pydantic", specifier = ">=2.10.0" },

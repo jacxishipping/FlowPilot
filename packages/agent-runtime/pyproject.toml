@@ -12,7 +12,9 @@ dependencies = [
     "flowpilot-node-sdk",
     "flowpilot-policy",
     "flowpilot-nodes-core",
+    "httpx>=0.28.0",
     "pydantic>=2.10.0",
+    "sqlalchemy[asyncio]>=2.0.36",
 ]
 
 [tool.hatch.build.targets.wheel]

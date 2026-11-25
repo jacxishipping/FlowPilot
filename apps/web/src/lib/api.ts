@@ -205,6 +205,73 @@ export async function createCredentialApi(
   });
 }
 
+export async function registerAccountApi(payload: {
+  email: string;
+  password: string;
+  organization_name: string;
+  organization_slug: string;
+}): Promise<{
+  access_token: string;
+  organization_id: string;
+  workspace_id: string;
+  project_id: string;
+  email: string;
+  role: string;
+}> {
+  return apiFetch("/api/v1/auth/register", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function loginAccountApi(payload: {
+  email: string;
+  password: string;
+}): Promise<{
+  access_token: string;
+  organization_id: string;
+  email: string;
+  role: string;
+}> {
+  return apiFetch("/api/v1/auth/login", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function listWorkflowsApi(apiKey: string): Promise<WorkflowRecord[]> {
+  return apiFetch<WorkflowRecord[]>("/api/v1/workflows", { apiKey });
+}
+
+export async function listWorkflowVersionsApi(
+  apiKey: string,
+  workflowId: string,
+): Promise<
+  Array<{
+    id: string;
+    workflow_id: string;
+    version_number: number;
+    content_hash: string;
+    changelog: string;
+    published_at: string;
+  }>
+> {
+  return apiFetch(`/api/v1/workflows/${workflowId}/versions`, { apiKey });
+}
+
+export async function listWorkflowRunsApi(
+  apiKey: string,
+  workflowId: string,
+): Promise<WorkflowRunState[]> {
+  return apiFetch<WorkflowRunState[]>(`/api/v1/workflows/${workflowId}/runs`, { apiKey });
+}
+
+export async function listProjectsApi(
+  apiKey: string,
+): Promise<Array<{ id: string; workspace_id: string; name: string }>> {
+  return apiFetch("/api/v1/projects", { apiKey });
+}
+
 export async function generateWorkflowDraftApi(
   apiKey: string,
   projectId: string,

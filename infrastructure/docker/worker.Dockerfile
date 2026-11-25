@@ -15,6 +15,8 @@ COPY nodes ./nodes
 COPY apps/api ./apps/api
 COPY apps/scheduler ./apps/scheduler
 COPY apps/workers/workflow ./apps/workers/workflow
+COPY apps/workers/code ./apps/workers/code
+COPY apps/workers/browser ./apps/workers/browser
 
 RUN uv sync --no-dev --frozen || uv sync --no-dev
 

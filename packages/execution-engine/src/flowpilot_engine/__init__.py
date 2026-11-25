@@ -2,6 +2,18 @@
 
 from flowpilot_engine.events import EventSink, InMemoryEventSink, format_sse
 from flowpilot_engine.interpreter import GraphInterpreter, StepPlan
+from flowpilot_engine.reliability import (
+    CircuitBreaker,
+    CircuitBreakerRegistry,
+    CircuitOpenError,
+    CircuitState,
+    DeadLetterEntry,
+    DeadLetterQueue,
+    EventBus,
+    InMemoryDeadLetterQueue,
+    InMemoryEventBus,
+    RedisStreamsEventBus,
+)
 from flowpilot_engine.retry import RetryDecision, compute_backoff_ms, evaluate_retry
 from flowpilot_engine.runner import WorkflowExecutionEngine, WorkflowExecutionError
 from flowpilot_engine.s3_store import ArtifactIntegrityError, S3ArtifactStore
@@ -35,14 +47,24 @@ __all__ = [
     "ApprovalSignal",
     "ArtifactIntegrityError",
     "ArtifactStore",
+    "CircuitBreaker",
+    "CircuitBreakerRegistry",
+    "CircuitOpenError",
+    "CircuitState",
+    "DeadLetterEntry",
+    "DeadLetterQueue",
+    "EventBus",
     "EventSink",
     "ExecutionStore",
     "GraphInterpreter",
     "InMemoryArtifactStore",
+    "InMemoryDeadLetterQueue",
+    "InMemoryEventBus",
     "InMemoryEventSink",
     "InMemoryExecutionStore",
     "InvalidStateTransitionError",
     "PayloadManager",
+    "RedisStreamsEventBus",
     "RetryDecision",
     "S3ArtifactStore",
     "StepPlan",

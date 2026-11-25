@@ -22,6 +22,7 @@ dependencies = [
     "flowpilot-scheduler",
     "flowpilot-worker-workflow",
     "flowpilot-worker-code",
+    "flowpilot-worker-browser",
 ]
 
 [dependency-groups]
@@ -52,6 +53,7 @@ members = [
     "apps/scheduler",
     "apps/workers/workflow",
     "apps/workers/code",
+    "apps/workers/browser",
 ]
 
 [tool.uv.sources]
@@ -72,6 +74,7 @@ flowpilot-api = { workspace = true }
 flowpilot-scheduler = { workspace = true }
 flowpilot-worker-workflow = { workspace = true }
 flowpilot-worker-code = { workspace = true }
+flowpilot-worker-browser = { workspace = true }
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -100,6 +103,8 @@ src = [
     "apps/scheduler/src",
     "apps/workers/workflow/src",
     "apps/workers/code/src",
+    "apps/workers/browser/src",
+    "scripts",
     "tests",
 ]
 
@@ -131,8 +136,17 @@ mypy_path = [
     "apps/scheduler/src",
     "apps/workers/workflow/src",
     "apps/workers/code/src",
+    "apps/workers/browser/src",
 ]
 
 [[tool.mypy.overrides]]
-module = ["temporalio.*", "aiosqlite.*", "asyncpg.*", "alembic.*", "opentelemetry.*"]
+module = [
+    "temporalio.*",
+    "aiosqlite.*",
+    "asyncpg.*",
+    "alembic.*",
+    "opentelemetry.*",
+    "redis.*",
+    "playwright.*",
+]
 ignore_missing_imports = true

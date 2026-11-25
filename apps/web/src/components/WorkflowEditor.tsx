@@ -15,8 +15,11 @@ import {
 import {
   CheckSquare,
   Cloud,
+  GitCommitHorizontal,
   LayoutGrid,
+  LogIn,
   Play,
+  Plus,
   Redo2,
   Rocket,
   Save,
@@ -33,8 +36,13 @@ import {
   fetchWorkflowJsonSchema,
   generateWorkflowDraftApi,
   listCredentialsApi,
+  listProjectsApi,
+  listWorkflowVersionsApi,
+  listWorkflowsApi,
+  loginAccountApi,
   patchWorkflow,
   publishWorkflowApi,
+  registerAccountApi,
   startWorkflowRunApi,
   submitApprovalDecisionApi,
   validateWorkflowApi,
@@ -58,9 +66,11 @@ import type {
   WorkflowRunState,
 } from "@/lib/types";
 import { AiDraftModal } from "./AiDraftModal";
+import { AuthModal } from "./AuthModal";
 import { FlowNode } from "./FlowNode";
 import { InspectorPanel, type InspectorTab } from "./InspectorPanel";
 import { NodeLibrary } from "./NodeLibrary";
+import { VersionHistoryModal, type VersionSummary } from "./VersionHistoryModal";
 
 const NODE_TYPES: NodeTypes = { flowNode: FlowNode };
 
@@ -80,6 +90,11 @@ function WorkflowEditorInner() {
   const [activeTab, setActiveTab] = useState<InspectorTab>("configure");
   const [aiModalOpen, setAiModalOpen] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [versionModalOpen, setVersionModalOpen] = useState(false);
+  const [versions, setVersions] = useState<VersionSummary[]>([]);
+  const [savedWorkflows, setSavedWorkflows] = useState<WorkflowRecord[]>([]);
   const [statusBanner, setStatusBanner] = useState<string>("Ready — offline preview or connect API");
 
   // 3. Server State
@@ -268,11 +283,85 @@ function WorkflowEditorInner() {
 
   const handleSave = async () => {
     try {
-      const { wf } = await ensureConnectedWorkflow();
+      const { sess, wf } = await ensureConnectedWorkflow();
+      const allWfs = await listWorkflowsApi(sess.api_key);
+      setSavedWorkflows(allWfs);
       setStatusBanner(`Saved draft '${wf.name}' at revision r${wf.revision}`);
     } catch (err) {
       setStatusBanner(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
     }
+  };
+
+  const handleOpenVersionHistory = async () => {
+    try {
+      if (session && workflowRecord) {
+        const list = await listWorkflowVersionsApi(session.api_key, workflowRecord.id);
+        setVersions(list);
+      }
+      setVersionModalOpen(true);
+    } catch (err) {
+      setStatusBanner(`Failed to load versions: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  const handleRegister = async (
+    email: string,
+    password: string,
+    orgName: string,
+    orgSlug: string,
+  ) => {
+    setAuthLoading(true);
+    try {
+      const reg = await registerAccountApi({
+        email,
+        password,
+        organization_name: orgName,
+        organization_slug: orgSlug,
+      });
+      setSession({
+        organization_id: reg.organization_id,
+        workspace_id: reg.workspace_id,
+        project_id: reg.project_id,
+        api_key: reg.access_token,
+      });
+      setAuthModalOpen(false);
+      setStatusBanner(`Signed in as ${reg.email} (${reg.role})`);
+    } catch (err) {
+      setStatusBanner(`Registration failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleLogin = async (email: string, password: string) => {
+    setAuthLoading(true);
+    try {
+      const res = await loginAccountApi({ email, password });
+      const projects = await listProjectsApi(res.access_token);
+      const firstProj = projects[0];
+      setSession({
+        organization_id: res.organization_id,
+        workspace_id: firstProj?.workspace_id ?? "",
+        project_id: firstProj?.id ?? "",
+        api_key: res.access_token,
+      });
+      const wfs = await listWorkflowsApi(res.access_token);
+      setSavedWorkflows(wfs);
+      setAuthModalOpen(false);
+      setStatusBanner(`Signed in as ${res.email} (${res.role})`);
+    } catch (err) {
+      setStatusBanner(`Login failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleNewWorkflow = () => {
+    setWorkflowRecord(null);
+    setPublishedVersion(null);
+    setWorkflowName(`Workflow ${savedWorkflows.length + 1}`);
+    commitGraph(() => createStarterWorkflowGraph());
+    setStatusBanner("Started new local workflow draft");
   };
 
   const handleValidate = async () => {
@@ -421,12 +510,38 @@ function WorkflowEditorInner() {
             <span className="brand-mark">FP</span>
             <span>FlowPilot Studio</span>
           </div>
+          {savedWorkflows.length > 0 && (
+            <select
+              className="select"
+              style={{ width: 170, height: 30 }}
+              value={workflowRecord?.id ?? ""}
+              onChange={(e) => {
+                const found = savedWorkflows.find((w) => w.id === e.target.value);
+                if (found) {
+                  setWorkflowRecord(found);
+                  setWorkflowName(found.name);
+                  setGraph(found.definition.graph);
+                  setStatusBanner(`Loaded workflow '${found.name}' (r${found.revision})`);
+                }
+              }}
+            >
+              <option value="">-- Switch Workflow --</option>
+              {savedWorkflows.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name} (r{w.revision})
+                </option>
+              ))}
+            </select>
+          )}
           <input
             className="input"
-            style={{ width: 220, height: 30 }}
+            style={{ width: 200, height: 30 }}
             value={workflowName}
             onChange={(e) => setWorkflowName(e.target.value)}
           />
+          <button className="btn" style={{ height: 30 }} onClick={handleNewWorkflow} title="New Workflow">
+            <Plus size={13} />
+          </button>
           <span className="pill">
             {workflowRecord ? `r${workflowRecord.revision}` : "local draft"}
           </span>
@@ -436,6 +551,12 @@ function WorkflowEditorInner() {
         </div>
 
         <div className="topbar-group">
+          <button className="btn" onClick={() => setAuthModalOpen(true)} title="Sign In / Register">
+            <LogIn size={13} /> {session ? "Account" : "Sign In"}
+          </button>
+          <button className="btn" onClick={handleOpenVersionHistory} title="Version History">
+            <GitCommitHorizontal size={13} /> Versions
+          </button>
           <button className="btn" onClick={handleUndo} disabled={undoStack.length === 0} title="Undo">
             <Undo2 size={13} />
           </button>
@@ -601,6 +722,21 @@ function WorkflowEditorInner() {
         loading={aiLoading}
         onClose={() => setAiModalOpen(false)}
         onGenerate={handleGenerateAiDraft}
+      />
+
+      <AuthModal
+        open={authModalOpen}
+        loading={authLoading}
+        onClose={() => setAuthModalOpen(false)}
+        onLogin={handleLogin}
+        onRegister={handleRegister}
+      />
+
+      <VersionHistoryModal
+        open={versionModalOpen}
+        versions={versions}
+        currentRevision={workflowRecord?.revision ?? 1}
+        onClose={() => setVersionModalOpen(false)}
       />
     </div>
   );

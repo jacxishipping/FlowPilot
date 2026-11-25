@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
@@ -200,10 +201,16 @@ class SqlAlchemyExecutionStore:
 
 
 class SqlAlchemyEventSink:
-    """Persists ordered ExecutionEvents to PostgreSQL for SSE streaming and replay."""
+    """Persists ordered ExecutionEvents to PostgreSQL and fans out live via EventBus."""
 
-    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+    def __init__(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        *,
+        event_bus: Any | None = None,
+    ) -> None:
         self._session_factory = session_factory
+        self._event_bus = event_bus
 
     async def emit(self, event: ExecutionEvent) -> None:
         async with self._session_factory() as session:
@@ -221,6 +228,8 @@ class SqlAlchemyEventSink:
                 )
             )
             await session.commit()
+        if self._event_bus is not None:
+            await self._event_bus.publish(event)
 
     async def list_events(
         self,

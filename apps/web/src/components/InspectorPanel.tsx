@@ -635,6 +635,83 @@ function NodeConfigEditor({
         </>
       )}
 
+      {catalogEntry?.metadata.is_loop && (
+        <>
+          <div className="section-title">Bounded Loop Sub-Graph</div>
+          <div className="field-group">
+            <label className="field-label">Items Expression *</label>
+            <input
+              className="input"
+              value={node.loop?.items_expression ?? "{{ trigger.items }}"}
+              onChange={(e) =>
+                onUpdate((n) => ({
+                  ...n,
+                  loop: {
+                    items_expression: e.target.value,
+                    item_variable: n.loop?.item_variable ?? "item",
+                    index_variable: n.loop?.index_variable ?? "index",
+                    max_iterations: n.loop?.max_iterations ?? 100,
+                    fail_fast: n.loop?.fail_fast ?? true,
+                    body_graph: n.loop?.body_graph ?? {
+                      nodes: [
+                        {
+                          id: "loop_step_1",
+                          type: "core.set_data",
+                          name: "Process Item",
+                          description: "",
+                          config: { values: { item: "{{ loop.item }}", idx: "{{ loop.index }}" } },
+                          credentials: {},
+                          policy: n.policy,
+                        },
+                      ],
+                      edges: [],
+                    },
+                  },
+                }))
+              }
+            />
+          </div>
+          <div className="field-group">
+            <label className="field-label">Max Iterations (1..10000)</label>
+            <input
+              className="input"
+              type="number"
+              value={node.loop?.max_iterations ?? 100}
+              onChange={(e) =>
+                onUpdate((n) => ({
+                  ...n,
+                  loop: n.loop
+                    ? { ...n.loop, max_iterations: Math.max(1, Number(e.target.value) || 100) }
+                    : undefined,
+                }))
+              }
+            />
+          </div>
+          <div className="field-group">
+            <label className="field-label">
+              Loop Body Nodes ({node.loop?.body_graph.nodes.length ?? 0})
+            </label>
+            <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>
+              {(node.loop?.body_graph.nodes ?? []).map((bn) => (
+                <div
+                  key={bn.id}
+                  style={{
+                    padding: "5px 8px",
+                    borderRadius: 6,
+                    background: "var(--bg-app)",
+                    border: "1px solid var(--border)",
+                    marginBottom: 4,
+                    fontFamily: "monospace",
+                  }}
+                >
+                  {bn.id} · {bn.type}
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
       <div className="section-title">Execution Policy & Safety</div>
       <div className="field-group">
         <label className="field-label">Timeout (ms)</label>

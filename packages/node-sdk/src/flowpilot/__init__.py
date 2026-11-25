@@ -24,6 +24,12 @@ from flowpilot.errors import (
 from flowpilot.http import ControlledHttpClient, HttpResponseData, validate_outbound_url
 from flowpilot.manifest import NodePackageManifest
 from flowpilot.node import BaseNode, NodeMetadata, NodeRegistry
+from flowpilot.scanner import (
+    MarketplaceSubmissionPipeline,
+    PackageScanReport,
+    ScanFinding,
+    scan_package_source,
+)
 from flowpilot.schemas import (
     EmptyConfig,
     GenericOutput,
@@ -57,6 +63,7 @@ __all__ = [
     "HttpResponseData",
     "InMemoryCredentialResolver",
     "LogEntry",
+    "MarketplaceSubmissionPipeline",
     "NodeConfigModel",
     "NodeMetadata",
     "NodeOutputModel",
@@ -67,10 +74,12 @@ __all__ = [
     "NodeTestResult",
     "NodeTimeoutError",
     "NonRetryableNodeError",
+    "PackageScanReport",
     "PackageTrustError",
     "PackageTrustPolicy",
     "ResolvedCredential",
     "RetryableNodeError",
+    "ScanFinding",
     "SecretValue",
     "SecurityPolicyError",
     "SideEffectIdempotencyError",
@@ -78,6 +87,7 @@ __all__ = [
     "generate_signing_keypair",
     "redact_text",
     "redact_value",
+    "scan_package_source",
     "sign_manifest",
     "validate_outbound_url",
     "verify_manifest_signature",

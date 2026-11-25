@@ -17,6 +17,8 @@ dependencies = [
     "flowpilot-nodes-email",
     "flowpilot-nodes-slack",
     "flowpilot-nodes-database",
+    "flowpilot-worker-code",
+    "flowpilot-worker-browser",
     "flowpilot-credentials",
     "flowpilot-policy",
     "flowpilot-observability",

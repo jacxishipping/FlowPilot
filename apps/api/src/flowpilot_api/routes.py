@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import AsyncIterator
 from uuid import UUID, uuid4
 
@@ -11,13 +10,14 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from flowpilot_api.ai_generator import generate_workflow_draft
+from flowpilot_api.ai_generator import generate_workflow_draft_async
 from flowpilot_api.auth import (
     TenantContext,
     generate_api_key,
     get_db_session,
     get_tenant_context,
     hash_password,
+    require_permission,
 )
 from flowpilot_api.db.models import (
     ApiKeyModel,
@@ -58,10 +58,18 @@ from flowpilot_api.schemas import (
     WorkspaceCreate,
     WorkspaceOut,
 )
-from flowpilot_engine import WorkflowExecutionEngine, WorkflowExecutionError, format_sse
+from flowpilot_engine import (
+    ApprovalSignal,
+    DeadLetterEntry,
+    WorkflowExecutionEngine,
+    WorkflowExecutionError,
+    format_sse,
+)
 from flowpilot_schema import (
+    PayloadRef,
     RunStatus,
     WorkflowDefinition,
+    WorkflowRun,
     WorkflowVersion,
     export_workflow_json_schema,
 )
@@ -469,7 +477,7 @@ async def publish_workflow(
     workflow_id: UUID,
     body: PublishWorkflowRequest,
     request: Request,
-    tenant: TenantContext = Depends(get_tenant_context),
+    tenant: TenantContext = Depends(require_permission("workflows:publish")),
     session: AsyncSession = Depends(get_db_session),
 ) -> WorkflowVersionOut:
     """Validate draft and create an immutable pinned WorkflowVersion."""
@@ -643,6 +651,26 @@ async def start_workflow_run(
         changelog=ver_row.changelog,
     )
 
+    if request.app.state.settings.execution_mode == "temporal":
+        run = WorkflowRun(
+            organization_id=tenant.organization_id,
+            workflow_id=version.workflow_id,
+            workflow_version_id=version.id,
+            status=RunStatus.QUEUED,
+            trigger_type=body.trigger_type,
+            input_ref=PayloadRef(inline=body.trigger_input),
+            idempotency_key=idempotency_key,
+        )
+        t_wf_id, t_run_id = await request.app.state.temporal_dispatch.start_workflow_run(
+            run_id=run.id,
+            version=version,
+            trigger_input=body.trigger_input,
+        )
+        run.temporal_workflow_id = t_wf_id
+        run.temporal_run_id = t_run_id
+        await request.app.state.execution_store.save_run(run)
+        return run.model_dump(mode="json")
+
     engine: WorkflowExecutionEngine = request.app.state.engine
     try:
         run = await engine.start_run(
@@ -654,6 +682,19 @@ async def start_workflow_run(
         )
     except WorkflowExecutionError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    if run.status == RunStatus.FAILED and run.error is not None:
+        await request.app.state.dlq.enqueue(
+            DeadLetterEntry(
+                organization_id=run.organization_id,
+                run_id=run.id,
+                workflow_id=run.workflow_id,
+                workflow_version_id=run.workflow_version_id,
+                node_id=run.error.node_id,
+                error=run.error,
+                payload={"trigger_input": body.trigger_input},
+            )
+        )
 
     return run.model_dump(mode="json")
 
@@ -710,29 +751,41 @@ async def stream_run_events(
         start_seq = max(start_seq, int(last_event_id))
 
     event_sink = request.app.state.event_sink
+    event_bus = request.app.state.event_bus
     store = request.app.state.execution_store
 
     async def _event_generator() -> AsyncIterator[str]:
         cursor = start_seq
-        while True:
-            events = await event_sink.list_events(
-                run_id,
-                organization_id=tenant.organization_id,
-                after_sequence=cursor,
-            )
-            for evt in events:
-                cursor = evt.sequence
-                yield format_sse(evt)
+        # Replay persisted events after cursor
+        events = await event_sink.list_events(
+            run_id,
+            organization_id=tenant.organization_id,
+            after_sequence=cursor,
+        )
+        for evt in events:
+            cursor = evt.sequence
+            yield format_sse(evt)
 
-            if not follow:
-                break
+        if not follow:
+            return
 
-            latest = await store.get_run(run_id)
-            if latest is None or latest.status.is_terminal:
+        latest = await store.get_run(run_id)
+        if latest is None or latest.status.is_terminal:
+            return
+
+        # Live push subscription via EventBus (zero polling)
+        async for live_evt in event_bus.subscribe(run_id):
+            if live_evt.sequence <= cursor:
+                continue
+            cursor = live_evt.sequence
+            yield format_sse(live_evt)
+            if live_evt.event_type.value in {
+                "run.succeeded",
+                "run.failed",
+                "run.canceled",
+                "run.timed_out",
+            } or await request.is_disconnected():
                 break
-            if await request.is_disconnected():
-                break
-            await asyncio.sleep(0.25)
 
     return StreamingResponse(
         _event_generator(),
@@ -807,6 +860,24 @@ async def decide_approval(
     approval_row = await session.get(ApprovalModel, approval_id)
     if approval_row is None or approval_row.organization_id != tenant.organization_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Approval not found.")
+
+    if request.app.state.settings.execution_mode == "temporal":
+        run_row = await session.get(WorkflowRunModel, approval_row.run_id)
+        if run_row is not None and run_row.temporal_workflow_id:
+            await request.app.state.temporal_dispatch.signal_approval(
+                temporal_workflow_id=run_row.temporal_workflow_id,
+                signal=ApprovalSignal(
+                    approval_id=approval_id,
+                    approved=body.approved,
+                    decided_by=tenant.actor,
+                    comment=body.comment,
+                ),
+            )
+            return {
+                "signaled": True,
+                "temporal_workflow_id": run_row.temporal_workflow_id,
+                "approval_id": str(approval_id),
+            }
 
     engine: WorkflowExecutionEngine = request.app.state.engine
     try:
@@ -913,12 +984,13 @@ async def generate_workflow(
     if proj is None or proj.organization_id != tenant.organization_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found.")
 
-    draft, missing_config, notes = generate_workflow_draft(
+    draft, missing_config, notes = await generate_workflow_draft_async(
         prompt=body.prompt,
         organization_id=tenant.organization_id,
         project_id=body.project_id,
         registry=request.app.state.registry,
         name=body.name,
+        model_provider=request.app.state.agent_model_provider,
     )
     validator = WorkflowValidator(request.app.state.registry)
     validation = validator.validate(draft)

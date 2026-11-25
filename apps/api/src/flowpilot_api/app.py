@@ -1,4 +1,4 @@
-"""FastAPI application factory with middleware, error envelopes, lifespan, and DI wiring."""
+"""FastAPI application factory wiring S3, KMS, EventBus, Temporal, Stripe, and OTLP."""
 
 from __future__ import annotations
 
@@ -13,8 +13,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
 
-from flowpilot import NodePackageManifest, NodeRegistry
-from flowpilot_agents import AgentToolGateway, InMemoryVectorMemoryStore
+from flowpilot import (
+    MarketplaceSubmissionPipeline,
+    NodePackageManifest,
+    NodeRegistry,
+    PackageTrustPolicy,
+    generate_signing_keypair,
+)
+from flowpilot_agents import (
+    AgentToolGateway,
+    AnthropicModelProvider,
+    GeminiModelProvider,
+    MultiModelProvider,
+    OpenAIModelProvider,
+    SqlAlchemyVectorMemoryStore,
+)
+from flowpilot_api.billing_service import StripeBillingClient
 from flowpilot_api.config import Settings
 from flowpilot_api.db.models import MarketplacePackageModel
 from flowpilot_api.db.session import create_engine_and_sessionmaker, init_schema
@@ -24,22 +38,35 @@ from flowpilot_api.db.stores import (
     SqlAlchemyExecutionStore,
 )
 from flowpilot_api.extras_routes import extras_router
+from flowpilot_api.platform_routes import platform_router
 from flowpilot_api.routes import router as v1_router
+from flowpilot_api.temporal_dispatch import TemporalDispatchClient
 from flowpilot_credentials import EnvelopeCipher, LocalMasterKeyProvider
-from flowpilot_engine import WorkflowExecutionEngine
+from flowpilot_engine import (
+    InMemoryArtifactStore,
+    InMemoryDeadLetterQueue,
+    InMemoryEventBus,
+    PayloadManager,
+    S3ArtifactStore,
+    WorkflowExecutionEngine,
+)
 from flowpilot_nodes_core import CORE_PACKAGE_MANIFEST, ModelProvider, create_default_registry
 from flowpilot_nodes_database import DATABASE_PACKAGE_MANIFEST, register_database_nodes
 from flowpilot_nodes_email import EMAIL_PACKAGE_MANIFEST, register_email_nodes
 from flowpilot_nodes_slack import SLACK_PACKAGE_MANIFEST, register_slack_nodes
-from flowpilot_observability import MetricsRegistry
+from flowpilot_observability import MetricsRegistry, OtlpConfig, configure_otlp_tracing
+from flowpilot_worker_browser import BrowserAutomationNode
+from flowpilot_worker_code import PythonSandboxNode
 
 
 def build_full_node_registry() -> NodeRegistry:
-    """Create a NodeRegistry populated with all 15 first-party FlowPilot nodes."""
+    """Create a NodeRegistry populated with all 17 first-party FlowPilot nodes."""
     reg = create_default_registry()
     register_email_nodes(reg)
     register_slack_nodes(reg)
     register_database_nodes(reg)
+    reg.register(PythonSandboxNode)
+    reg.register(BrowserAutomationNode)
     return reg
 
 
@@ -51,40 +78,95 @@ FIRST_PARTY_MANIFESTS: tuple[NodePackageManifest, ...] = (
 )
 
 
+def _build_default_model_provider(cfg: Settings) -> ModelProvider | None:
+    providers: dict[str, ModelProvider] = {}
+    if cfg.openai_api_key:
+        providers["openai"] = OpenAIModelProvider(api_key=cfg.openai_api_key)
+    if cfg.anthropic_api_key:
+        providers["anthropic"] = AnthropicModelProvider(api_key=cfg.anthropic_api_key)
+    if cfg.gemini_api_key:
+        providers["gemini"] = GeminiModelProvider(api_key=cfg.gemini_api_key)
+    return MultiModelProvider(providers) if providers else None
+
+
 def create_app(
     settings: Settings | None = None,
     *,
     registry: NodeRegistry | None = None,
     http_transport: httpx.AsyncBaseTransport | None = None,
+    oauth_http_transport: httpx.AsyncBaseTransport | None = None,
+    s3_transport: httpx.AsyncBaseTransport | None = None,
+    stripe_transport: httpx.AsyncBaseTransport | None = None,
+    temporal_client: Any | None = None,
     services: dict[str, Any] | None = None,
     agent_model_provider: ModelProvider | None = None,
     tool_gateway: AgentToolGateway | None = None,
 ) -> FastAPI:
     cfg = settings or Settings()
+    configure_otlp_tracing(
+        OtlpConfig(
+            service_name="flowpilot-api",
+            otlp_endpoint=cfg.otlp_endpoint,
+            enabled=cfg.otlp_enabled,
+        )
+    )
+
     node_registry = registry or build_full_node_registry()
     db_engine, session_factory = create_engine_and_sessionmaker(cfg.database_url)
     cipher = EnvelopeCipher(
         LocalMasterKeyProvider(active_key_id=cfg.active_key_id, master_secret=cfg.master_key)
     )
+    event_bus = InMemoryEventBus()
+    dlq = InMemoryDeadLetterQueue()
     exec_store = SqlAlchemyExecutionStore(session_factory)
-    event_sink = SqlAlchemyEventSink(session_factory)
+    event_sink = SqlAlchemyEventSink(session_factory, event_bus=event_bus)
     cred_resolver = SqlAlchemyCredentialResolver(session_factory, cipher)
+
+    artifact_store = (
+        S3ArtifactStore(
+            endpoint_url=cfg.s3_endpoint_url,
+            bucket=cfg.s3_bucket,
+            access_key=cfg.s3_access_key,
+            secret_key=cfg.s3_secret_key,
+            transport=s3_transport,
+        )
+        if cfg.use_s3_artifacts
+        else InMemoryArtifactStore()
+    )
+    payload_manager = PayloadManager(artifact_store=artifact_store)
+
+    resolved_model_provider = agent_model_provider or _build_default_model_provider(cfg)
+    engine_services = dict(services or {})
+    if resolved_model_provider is not None and "model_provider" not in engine_services:
+        engine_services["model_provider"] = resolved_model_provider
+
     workflow_engine = WorkflowExecutionEngine(
         registry=node_registry,
         store=exec_store,
         event_sink=event_sink,
+        payload_manager=payload_manager,
         credential_resolver=cred_resolver,
         http_transport=http_transport,
         allow_private_networks=cfg.allow_private_networks,
-        services=services,
+        services=engine_services,
     )
     metrics = MetricsRegistry()
+    billing_client = StripeBillingClient(api_key=cfg.stripe_api_key, transport=stripe_transport)
+    temporal_dispatch = TemporalDispatchClient(
+        address=cfg.temporal_address,
+        namespace=cfg.temporal_namespace,
+        client=temporal_client,
+    )
+    priv_key, pub_key = generate_signing_keypair()
+    marketplace_pipeline = MarketplaceSubmissionPipeline(
+        trust_policy=PackageTrustPolicy(trusted_public_keys=[pub_key]),
+        signing_private_key_b64=priv_key,
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         if cfg.auto_create_tables or cfg.database_url.startswith("sqlite"):
             await init_schema(db_engine)
-        # Seed all first-party integration packages in marketplace catalog idempotently
         async with session_factory() as session:
             for manifest in FIRST_PARTY_MANIFESTS:
                 existing = (
@@ -122,12 +204,18 @@ def create_app(
     app.state.cipher = cipher
     app.state.execution_store = exec_store
     app.state.event_sink = event_sink
+    app.state.event_bus = event_bus
+    app.state.dlq = dlq
     app.state.credential_resolver = cred_resolver
     app.state.engine = workflow_engine
     app.state.metrics = metrics
-    app.state.agent_model_provider = agent_model_provider
+    app.state.billing_client = billing_client
+    app.state.temporal_dispatch = temporal_dispatch
+    app.state.marketplace_pipeline = marketplace_pipeline
+    app.state.oauth_http_transport = oauth_http_transport
+    app.state.agent_model_provider = resolved_model_provider
     app.state.tool_gateway = tool_gateway or AgentToolGateway()
-    app.state.memory_store = InMemoryVectorMemoryStore()
+    app.state.memory_store = SqlAlchemyVectorMemoryStore(session_factory)
 
     app.add_middleware(
         CORSMiddleware,
@@ -174,6 +262,7 @@ def create_app(
             "execution_mode": cfg.execution_mode,
         }
 
+    app.include_router(platform_router)
     app.include_router(v1_router)
     app.include_router(extras_router)
     return app

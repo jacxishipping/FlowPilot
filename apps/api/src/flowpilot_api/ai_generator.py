@@ -6,6 +6,7 @@ and NEVER auto-publishes or auto-executes generated drafts.
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID
 
 from flowpilot import NodeRegistry
@@ -255,3 +256,63 @@ def generate_workflow_draft(
         notes.append("Draft has validation issues that must be resolved before publishing.")
 
     return draft, missing_config, notes
+
+
+async def generate_workflow_draft_async(
+    *,
+    prompt: str,
+    organization_id: UUID,
+    project_id: UUID,
+    registry: NodeRegistry,
+    name: str | None = None,
+    model_provider: Any | None = None,
+) -> tuple[WorkflowDefinition, list[str], list[str]]:
+    """LLM-assisted canonical workflow draft generator with deterministic typed fallback."""
+    import json
+
+    if model_provider is not None and hasattr(model_provider, "complete"):
+        catalog_types = registry.list_types()
+        sys_prompt = (
+            "You generate strictly valid FlowPilot canonical WorkflowGraph JSON objects with "
+            f"keys 'nodes' and 'edges'. Allowed node types: {catalog_types}. "
+            "Respond ONLY with raw JSON."
+        )
+        try:
+            completion = await model_provider.complete(
+                provider="openai",
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": sys_prompt},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.1,
+                max_tokens=2048,
+            )
+            parsed = json.loads(completion.content)
+            graph = WorkflowGraph.model_validate(parsed)
+            draft = WorkflowDefinition(
+                organization_id=organization_id,
+                project_id=project_id,
+                name=name or f"AI Draft: {prompt.strip()[:44]}",
+                description=f"LLM-generated draft for: {prompt}",
+                graph=graph,
+            )
+            return (
+                draft,
+                [],
+                [
+                    "Generated via configured LLM provider as an editable draft "
+                    "(never auto-published)."
+                ],
+            )
+        except Exception:
+            # Fall back safely to deterministic typed generator if LLM output is invalid JSON
+            pass
+
+    return generate_workflow_draft(
+        prompt=prompt,
+        organization_id=organization_id,
+        project_id=project_id,
+        registry=registry,
+        name=name,
+    )
