@@ -9,6 +9,7 @@ from flowpilot_credentials.envelope import (
 )
 from flowpilot_credentials.kms import (
     AwsKmsProvider,
+    AzureKeyVaultKeyProvider,
     CustomerManagedKeyProvider,
     GcpKmsProvider,
     TenantCmkRouter,
@@ -17,6 +18,7 @@ from flowpilot_credentials.kms import (
 
 __all__ = [
     "AwsKmsProvider",
+    "AzureKeyVaultKeyProvider",
     "CredentialEncryptionError",
     "CustomerManagedKeyProvider",
     "EncryptedEnvelope",

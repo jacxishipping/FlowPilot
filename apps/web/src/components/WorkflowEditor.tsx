@@ -44,7 +44,9 @@ import {
   type InboxApprovalItem,
   type TemplateSummary,
   type WorkflowDiffResult,
+  acquireWorkflowLockApi,
   bootstrapDevTenant,
+  buildChatEmbedSnippet,
   createCredentialApi,
   createWorkflow,
   diffWorkflowVersionsApi,
@@ -139,6 +141,8 @@ function WorkflowEditorInner() {
   const [hubTab, setHubTab] = useState<HubTab>("insights");
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantLoading, setAssistantLoading] = useState(false);
+  const [autosaveEnabled, setAutosaveEnabled] = useState(false);
+  const [lockOwner, setLockOwner] = useState<string | null>(null);
   const importFileRef = useRef<HTMLInputElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
@@ -215,6 +219,29 @@ function WorkflowEditorInner() {
   );
   const [activeRun, setActiveRun] = useState<WorkflowRunState | null>(null);
   const [runEvents, setRunEvents] = useState<ExecutionEvent[]>([]);
+
+  // Debounced autosave & collaborative edit lock renewal when enabled
+  useEffect(() => {
+    if (!autosaveEnabled || !session || !workflowRecord) return;
+    const timer = window.setTimeout(async () => {
+      try {
+        const lock = await acquireWorkflowLockApi(session.api_key, workflowRecord.id);
+        setLockOwner(lock.locked_by);
+        const updated = await patchWorkflow(session.api_key, workflowRecord.id, {
+          expected_revision: workflowRecord.revision,
+          name: workflowName,
+          graph,
+        });
+        setWorkflowRecord(updated);
+        setStatusBanner(`Autosaved r${updated.revision}`);
+      } catch (err) {
+        setStatusBanner(
+          `Autosave paused: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }, 2500);
+    return () => window.clearTimeout(timer);
+  }, [autosaveEnabled, session, workflowRecord, workflowName, graph]);
 
   // Load live NodeRegistry catalog & WorkflowDefinition JSON Schema on mount
   useEffect(() => {
@@ -996,17 +1023,47 @@ function WorkflowEditorInner() {
                   <Database size={14} /> Data Tables &amp; RAG
                 </button>
                 {workflowRecord && (
-                  <button
-                    type="button"
-                    className="menu-item"
-                    onClick={() => {
-                      setMoreMenuOpen(false);
-                      window.open(`/chat/${workflowRecord.id}`, "_blank", "noopener");
-                    }}
-                  >
-                    <MessageSquare size={14} /> Open Hosted Chat
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      className="menu-item"
+                      onClick={() => {
+                        setMoreMenuOpen(false);
+                        window.open(`/chat/${workflowRecord.id}`, "_blank", "noopener");
+                      }}
+                    >
+                      <MessageSquare size={14} /> Open Hosted Chat
+                    </button>
+                    <button
+                      type="button"
+                      className="menu-item"
+                      onClick={() => {
+                        setMoreMenuOpen(false);
+                        const snippet = buildChatEmbedSnippet(workflowRecord.id);
+                        if (typeof navigator !== "undefined" && navigator.clipboard) {
+                          void navigator.clipboard.writeText(snippet).catch(() => undefined);
+                        }
+                        setStatusBanner("Copied embeddable ChatHub <script> snippet");
+                      }}
+                    >
+                      <MessageSquare size={14} /> Copy Embed Widget
+                    </button>
+                  </>
                 )}
+                <button
+                  type="button"
+                  className="menu-item"
+                  onClick={() => {
+                    setMoreMenuOpen(false);
+                    setAutosaveEnabled((prev) => {
+                      const next = !prev;
+                      setStatusBanner(next ? "Autosave & Edit Lock enabled" : "Autosave disabled");
+                      return next;
+                    });
+                  }}
+                >
+                  <Save size={14} /> {autosaveEnabled ? "Autosave: ON" : "Autosave: OFF"}
+                </button>
                 <div className="menu-sep" />
                 <button
                   type="button"
@@ -1156,7 +1213,10 @@ function WorkflowEditorInner() {
               className="status-dot"
               style={{ background: session ? "var(--success)" : "var(--text-muted)" }}
             />
-            <span>{statusBanner}</span>
+            <span>
+              {statusBanner}
+              {lockOwner ? ` · lock:${lockOwner.slice(0, 14)}` : ""}
+            </span>
           </div>
         </main>
 
@@ -1309,6 +1369,7 @@ function WorkflowEditorInner() {
         open={hubModalOpen}
         initialTab={hubTab}
         apiKey={session?.api_key ?? null}
+        projectId={session?.project_id ?? null}
         onClose={() => setHubModalOpen(false)}
         onConnectorsImported={async () => {
           const updatedCatalog = await fetchNodeCatalog();

@@ -16,6 +16,12 @@ from flowpilot_policy.rbac import (
     authorize,
     has_scope,
 )
+from flowpilot_policy.totp import (
+    build_otpauth_uri,
+    generate_totp_code,
+    generate_totp_secret,
+    verify_totp_code,
+)
 
 __all__ = [
     "PLAN_CATALOG",
@@ -27,7 +33,11 @@ __all__ = [
     "Role",
     "TenantRateLimiter",
     "authorize",
+    "build_otpauth_uri",
     "evaluate_quota",
+    "generate_totp_code",
+    "generate_totp_secret",
     "get_plan_limits",
     "has_scope",
+    "verify_totp_code",
 ]

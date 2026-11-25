@@ -42,6 +42,7 @@ from flowpilot_api.db.stores import (
 )
 from flowpilot_api.enterprise_routes import enterprise_router
 from flowpilot_api.extras_routes import extras_router
+from flowpilot_api.final_routes import final_router
 from flowpilot_api.parity_routes import (
     build_data_table_service,
     build_knowledge_search_service,
@@ -286,6 +287,7 @@ def create_app(
             "execution_mode": cfg.execution_mode,
         }
 
+    app.include_router(final_router)
     app.include_router(parity_router)
     app.include_router(advanced_router)
     app.include_router(enterprise_router)

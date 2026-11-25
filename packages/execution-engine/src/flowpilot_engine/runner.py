@@ -129,6 +129,31 @@ class WorkflowExecutionEngine:
             "output": child_out,
         }
 
+    async def _dispatch_error_workflow(
+        self,
+        failed_run: WorkflowRun,
+        version: WorkflowVersion,
+        failed_node_id: str | None,
+    ) -> WorkflowRun | None:
+        """Invoke a configured error_workflow_version_id on failure (with anti-recursion guard)."""
+        err_ver_id = version.definition.settings.error_workflow_version_id
+        if err_ver_id is None or failed_run.trigger_type == "error_workflow":
+            return None
+        err_version = await self._store.get_version(err_ver_id)
+        if err_version is None or err_version.organization_id != failed_run.organization_id:
+            return None
+        return await self.start_run(
+            err_version,
+            organization_id=failed_run.organization_id,
+            trigger_type="error_workflow",
+            trigger_input={
+                "failed_workflow_id": str(failed_run.workflow_id),
+                "failed_run_id": str(failed_run.id),
+                "failed_node_id": failed_node_id,
+                "error_message": failed_run.error.message if failed_run.error else "Run failed",
+            },
+        )
+
     @property
     def store(self) -> ExecutionStore:
         return self._store
@@ -539,6 +564,7 @@ class WorkflowExecutionEngine:
                     node_id=failed_id,
                     payload={"error": run.error.model_dump(mode="json")},
                 )
+                await self._dispatch_error_workflow(run, version, failed_id)
                 return run
 
             if step.is_complete:

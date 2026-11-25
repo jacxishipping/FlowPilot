@@ -92,6 +92,42 @@ class GcpKmsProvider:
         return bytes(resp.plaintext)
 
 
+class AzureKeyVaultKeyProvider:
+    """Azure Key Vault CryptographyClient provider (wrap_key / unwrap_key)."""
+
+    def __init__(
+        self,
+        *,
+        vault_url: str,
+        key_name: str,
+        crypto_client: Any,
+        algorithm: str = "RSA-OAEP-256",
+    ) -> None:
+        self._vault_url = vault_url.rstrip("/")
+        self._key_name = key_name
+        self._client = crypto_client
+        self._algorithm = algorithm
+
+    @property
+    def active_key_id(self) -> str:
+        return f"azure-kv:{self._vault_url}/keys/{self._key_name}"
+
+    def wrap_dek(self, dek: bytes, *, aad: bytes) -> tuple[str, bytes, bytes]:
+        resp = self._client.wrap_key(self._algorithm, dek)
+        return self.active_key_id, bytes(resp.encrypted_key), b"azure-kv-v1"
+
+    def unwrap_dek(
+        self,
+        *,
+        key_id: str,
+        wrapped_dek: bytes,
+        nonce: bytes,
+        aad: bytes,
+    ) -> bytes:
+        resp = self._client.unwrap_key(self._algorithm, wrapped_dek)
+        return bytes(resp.key)
+
+
 class VaultTransitKmsProvider:
     """HashiCorp Vault Transit secrets engine provider for self-hosted & enterprise KEKs."""
 

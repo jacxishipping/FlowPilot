@@ -1,30 +1,36 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BarChart3, BookOpen, Database, Plug, Plus, Search, Trash2, X } from "lucide-react";
+import { BarChart3, BookOpen, Database, Folder, Plug, Plus, Search, Trash2, Upload, X } from "lucide-react";
 import {
   type DataTableRowItem,
   type DataTableSummary,
+  type FolderItem,
   type KnowledgeDocSummary,
   type WorkspaceInsights,
   createDataTableApi,
+  createFolderApi,
+  deleteFolderApi,
   deleteTableRowApi,
   getInsightsApi,
   importOpenApiConnectorApi,
   ingestKnowledgeDocApi,
   insertTableRowApi,
   listDataTablesApi,
+  listFoldersApi,
   listKnowledgeDocsApi,
   listTableRowsApi,
   searchKnowledgeApi,
+  uploadKnowledgeFileApi,
 } from "@/lib/api";
 
-export type HubTab = "insights" | "tables" | "knowledge" | "openapi";
+export type HubTab = "insights" | "tables" | "knowledge" | "folders" | "openapi";
 
 interface WorkspaceHubModalProps {
   open: boolean;
   initialTab?: HubTab;
   apiKey: string | null;
+  projectId: string | null;
   onClose: () => void;
   onConnectorsImported: () => Promise<void>;
 }
@@ -33,6 +39,7 @@ export function WorkspaceHubModal({
   open,
   initialTab = "insights",
   apiKey,
+  projectId,
   onClose,
   onConnectorsImported,
 }: WorkspaceHubModalProps) {
@@ -43,6 +50,8 @@ export function WorkspaceHubModal({
   const [rows, setRows] = useState<DataTableRowItem[]>([]);
   const [newTableName, setNewTableName] = useState("");
   const [newRowJson, setNewRowJson] = useState('{"customer": "Acme", "status": "active"}');
+  const [folders, setFolders] = useState<FolderItem[]>([]);
+  const [newFolderName, setNewFolderName] = useState("");
 
   const [docs, setDocs] = useState<KnowledgeDocSummary[]>([]);
   const [docTitle, setDocTitle] = useState("");
@@ -88,6 +97,8 @@ export function WorkspaceHubModal({
         .catch(() => undefined);
     } else if (tab === "knowledge") {
       void listKnowledgeDocsApi(apiKey).then(setDocs).catch(() => undefined);
+    } else if (tab === "folders") {
+      void listFoldersApi(apiKey).then(setFolders).catch(() => undefined);
     }
   }, [open, tab, apiKey, selectedTableId]);
 
@@ -136,6 +147,13 @@ export function WorkspaceHubModal({
             onClick={() => setTab("knowledge")}
           >
             <BookOpen size={12} style={{ marginRight: 5 }} /> Knowledge / RAG
+          </button>
+          <button
+            type="button"
+            className={`tab-btn ${tab === "folders" ? "active" : ""}`}
+            onClick={() => setTab("folders")}
+          >
+            <Folder size={12} style={{ marginRight: 5 }} /> Folders
           </button>
           <button
             type="button"
@@ -311,24 +329,59 @@ export function WorkspaceHubModal({
                     value={docContent}
                     onChange={(e) => setDocContent(e.target.value)}
                   />
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    style={{ marginTop: 6 }}
-                    disabled={!docTitle.trim() || !docContent.trim()}
-                    onClick={async () => {
-                      const res = await ingestKnowledgeDocApi(apiKey, {
-                        title: docTitle.trim(),
-                        content: docContent.trim(),
-                      });
-                      setDocTitle("");
-                      setDocContent("");
-                      setDocs(await listKnowledgeDocsApi(apiKey));
-                      setHubStatus(`Indexed '${res.title}' (${res.chunk_count} chunks)`);
-                    }}
-                  >
-                    Index into Knowledge Base
-                  </button>
+                  <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={!docTitle.trim() || !docContent.trim()}
+                      onClick={async () => {
+                        const res = await ingestKnowledgeDocApi(apiKey, {
+                          title: docTitle.trim(),
+                          content: docContent.trim(),
+                        });
+                        setDocTitle("");
+                        setDocContent("");
+                        setDocs(await listKnowledgeDocsApi(apiKey));
+                        setHubStatus(`Indexed '${res.title}' (${res.chunk_count} chunks)`);
+                      }}
+                    >
+                      Index Text
+                    </button>
+                    <label className="btn" style={{ cursor: "pointer" }}>
+                      <Upload size={13} /> Upload PDF / CSV / MD / TXT
+                      <input
+                        type="file"
+                        accept=".pdf,.csv,.md,.txt,application/pdf,text/plain,text/csv,text/markdown"
+                        style={{ display: "none" }}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          try {
+                            const buf = await file.arrayBuffer();
+                            const bytes = new Uint8Array(buf);
+                            let bin = "";
+                            for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+                            const b64 = btoa(bin);
+                            const res = await uploadKnowledgeFileApi(apiKey, {
+                              filename: file.name,
+                              mime_type: file.type || "application/octet-stream",
+                              content_base64: b64,
+                            });
+                            setDocs(await listKnowledgeDocsApi(apiKey));
+                            setHubStatus(
+                              `Uploaded '${res.title}' (${res.extracted_chars} chars, ${res.chunk_count} chunks)`,
+                            );
+                          } catch (err) {
+                            setHubStatus(
+                              `Upload failed: ${err instanceof Error ? err.message : String(err)}`,
+                            );
+                          } finally {
+                            e.target.value = "";
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
                 </div>
 
                 <div className="field-group">
@@ -362,6 +415,62 @@ export function WorkspaceHubModal({
                           {hit.content}
                         </div>
                       ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {tab === "folders" && (
+              <div>
+                <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                  <input
+                    className="input"
+                    placeholder="New folder name (e.g. Finance Ops)"
+                    value={newFolderName}
+                    onChange={(e) => setNewFolderName(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={!newFolderName.trim() || !projectId}
+                    onClick={async () => {
+                      if (!projectId) return;
+                      const created = await createFolderApi(apiKey, projectId, newFolderName.trim());
+                      setFolders((prev) => [...prev, created]);
+                      setNewFolderName("");
+                      setHubStatus(`Created folder '${created.name}'`);
+                    }}
+                  >
+                    <Plus size={13} /> New Folder
+                  </button>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {folders.map((f) => (
+                    <div
+                      key={f.id}
+                      className="surface-card"
+                      style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: 10 }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <Folder size={14} color="var(--brand-accent)" />
+                        <strong>{f.name}</strong>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-icon"
+                        onClick={async () => {
+                          await deleteFolderApi(apiKey, f.id);
+                          setFolders((prev) => prev.filter((x) => x.id !== f.id));
+                        }}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  ))}
+                  {folders.length === 0 && (
+                    <div style={{ color: "var(--text-muted)", fontSize: 12 }}>
+                      No folders yet. Organize team workflows into folders above.
                     </div>
                   )}
                 </div>

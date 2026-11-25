@@ -661,6 +661,58 @@ class ChatMessageModel(Base):
     )
 
 
+class WorkflowLockModel(Base):
+    __tablename__ = "workflow_locks"
+    __table_args__ = (Index("ix_workflow_locks_org_id", "organization_id"),)
+
+    workflow_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("workflows.id", ondelete="CASCADE"), primary_key=True
+    )
+    organization_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    locked_by: Mapped[str] = mapped_column(String(320), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utc_now
+    )
+
+
+class CustomRoleModel(Base):
+    __tablename__ = "custom_roles"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "name", name="uq_custom_role_org_name"),
+        Index("ix_custom_roles_org_id", "organization_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    organization_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    permissions: Mapped[list[str]] = mapped_column(JSONType, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utc_now
+    )
+
+
+class UserMfaModel(Base):
+    __tablename__ = "user_mfa"
+    __table_args__ = (Index("ix_user_mfa_org_id", "organization_id"),)
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    organization_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    actor: Mapped[str] = mapped_column(String(320), nullable=False, index=True)
+    encrypted_secret_envelope: Mapped[dict[str, Any]] = mapped_column(JSONType, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utc_now
+    )
+
+
 TENANT_SCOPED_TABLES: tuple[str, ...] = (
     "organization_members",
     "workspaces",
@@ -690,4 +742,7 @@ TENANT_SCOPED_TABLES: tuple[str, ...] = (
     "binary_files",
     "chat_sessions",
     "chat_messages",
+    "workflow_locks",
+    "custom_roles",
+    "user_mfa",
 )

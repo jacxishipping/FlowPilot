@@ -568,6 +568,62 @@ export async function sendChatMessageApi(
   });
 }
 
+export async function acquireWorkflowLockApi(
+  apiKey: string,
+  workflowId: string,
+  ttlSeconds = 120,
+): Promise<{ locked: boolean; locked_by: string | null; expires_at: string | null; is_owner: boolean }> {
+  return apiFetch(`/api/v1/workflows/${workflowId}/lock`, {
+    method: "POST",
+    apiKey,
+    body: JSON.stringify({ ttl_seconds: ttlSeconds }),
+  });
+}
+
+export async function uploadKnowledgeFileApi(
+  apiKey: string,
+  payload: { filename: string; mime_type: string; content_base64: string; collection?: string },
+): Promise<{ id: string; title: string; extracted_chars: number; chunk_count: number }> {
+  return apiFetch("/api/v1/knowledge/upload", {
+    method: "POST",
+    apiKey,
+    body: JSON.stringify(payload),
+  });
+}
+
+export interface FolderItem {
+  id: string;
+  project_id: string;
+  name: string;
+  parent_id: string | null;
+}
+
+export async function listFoldersApi(apiKey: string): Promise<FolderItem[]> {
+  return apiFetch<FolderItem[]>("/api/v1/folders", { apiKey });
+}
+
+export async function createFolderApi(
+  apiKey: string,
+  projectId: string,
+  name: string,
+): Promise<FolderItem> {
+  return apiFetch<FolderItem>("/api/v1/folders", {
+    method: "POST",
+    apiKey,
+    body: JSON.stringify({ project_id: projectId, name }),
+  });
+}
+
+export async function deleteFolderApi(apiKey: string, folderId: string): Promise<void> {
+  await apiFetch(`/api/v1/folders/${folderId}`, { method: "DELETE", apiKey });
+}
+
+export function buildChatEmbedSnippet(workflowId: string): string {
+  const studioOrigin =
+    typeof window !== "undefined" ? window.location.origin : "https://flowpilot-web.onrender.com";
+  return `<script src="${API_BASE_URL}/api/v1/chat/${workflowId}/embed.js?studio_url=${encodeURIComponent(studioOrigin)}" async></script>`;
+}
+
 export async function generateWorkflowDraftApi(
   apiKey: string,
   projectId: string,

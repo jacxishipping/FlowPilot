@@ -14,6 +14,8 @@ export const API_PATHS = {
   "/api/v1/approvals/{approval_id}/decision": ["POST"] as const,
   "/api/v1/audit-logs/export": ["GET"] as const,
   "/api/v1/audit-logs/siem-push": ["POST"] as const,
+  "/api/v1/auth/2fa/enroll": ["POST"] as const,
+  "/api/v1/auth/2fa/verify": ["POST"] as const,
   "/api/v1/auth/bootstrap": ["POST"] as const,
   "/api/v1/auth/login": ["POST"] as const,
   "/api/v1/auth/logout": ["POST"] as const,
@@ -25,8 +27,10 @@ export const API_PATHS = {
   "/api/v1/billing/reconcile": ["POST"] as const,
   "/api/v1/billing/summary": ["GET"] as const,
   "/api/v1/billing/webhooks/stripe": ["POST"] as const,
+  "/api/v1/chat/{workflow_id}/embed.js": ["GET"] as const,
   "/api/v1/chat/{workflow_id}/messages": ["POST"] as const,
   "/api/v1/chat/{workflow_id}/sessions/{session_id}": ["GET"] as const,
+  "/api/v1/chat/{workflow_id}/stream": ["POST"] as const,
   "/api/v1/connectors/openapi/import": ["POST"] as const,
   "/api/v1/credentials": ["GET", "POST"] as const,
   "/api/v1/dlq": ["GET"] as const,
@@ -40,6 +44,7 @@ export const API_PATHS = {
   "/api/v1/insights": ["GET"] as const,
   "/api/v1/knowledge/documents": ["GET", "POST"] as const,
   "/api/v1/knowledge/search": ["POST"] as const,
+  "/api/v1/knowledge/upload": ["POST"] as const,
   "/api/v1/marketplace/packages": ["GET"] as const,
   "/api/v1/marketplace/packages/{package_id}/install": ["POST"] as const,
   "/api/v1/marketplace/submissions": ["POST"] as const,
@@ -50,6 +55,8 @@ export const API_PATHS = {
   "/api/v1/oauth/{provider}/callback": ["POST"] as const,
   "/api/v1/organizations": ["GET", "POST"] as const,
   "/api/v1/projects": ["GET", "POST"] as const,
+  "/api/v1/roles": ["GET", "POST"] as const,
+  "/api/v1/roles/{role_id}": ["DELETE"] as const,
   "/api/v1/runs/{run_id}": ["GET"] as const,
   "/api/v1/runs/{run_id}/cancel": ["POST"] as const,
   "/api/v1/runs/{run_id}/events": ["GET"] as const,
@@ -58,6 +65,7 @@ export const API_PATHS = {
   "/api/v1/schemas/workflow": ["GET"] as const,
   "/api/v1/scim/v2/Users": ["GET", "POST"] as const,
   "/api/v1/scim/v2/Users/{user_id}": ["DELETE"] as const,
+  "/api/v1/sso/ldap/login": ["POST"] as const,
   "/api/v1/sso/oidc/callback": ["POST"] as const,
   "/api/v1/sso/saml/acs": ["POST"] as const,
   "/api/v1/tables": ["GET", "POST"] as const,
@@ -74,6 +82,7 @@ export const API_PATHS = {
   "/api/v1/workflows/{workflow_id}/deactivate": ["POST"] as const,
   "/api/v1/workflows/{workflow_id}/diff": ["GET"] as const,
   "/api/v1/workflows/{workflow_id}/evals/run": ["POST"] as const,
+  "/api/v1/workflows/{workflow_id}/lock": ["DELETE", "GET", "POST"] as const,
   "/api/v1/workflows/{workflow_id}/promote": ["POST"] as const,
   "/api/v1/workflows/{workflow_id}/publish": ["POST"] as const,
   "/api/v1/workflows/{workflow_id}/rollback": ["POST"] as const,
@@ -88,6 +97,9 @@ export const API_PATHS = {
 export type ApiPath = keyof typeof API_PATHS;
 
 export interface OpenApiComponents {
+  "AcquireLockRequest": {
+    "ttl_seconds"?: number;
+  };
   "AgentBudget": {
     "max_steps"?: number;
     "max_duration_ms"?: number;
@@ -198,6 +210,11 @@ export interface OpenApiComponents {
     "scopes": Array<string>;
     "created_at": string;
   };
+  "CustomRoleCreateRequest": {
+    "name": string;
+    "description"?: string;
+    "permissions": Array<string>;
+  };
   "DataTableCreateRequest": {
     "name": string;
     "description"?: string;
@@ -251,10 +268,21 @@ export interface OpenApiComponents {
     "collection"?: string;
     "mime_type"?: string;
   };
+  "KnowledgeFileUploadRequest": {
+    "filename": string;
+    "mime_type"?: string;
+    "content_base64": string;
+    "collection"?: string;
+  };
   "KnowledgeSearchRequest": {
     "query": string;
     "top_k"?: number;
     "collection"?: string | null;
+  };
+  "LdapLoginRequest": {
+    "organization_id": string;
+    "username": string;
+    "password": string;
   };
   "LoginRequest": {
     "email": string;
@@ -480,6 +508,9 @@ export interface OpenApiComponents {
   "SwitchOrgRequest": {
     "organization_id": string;
   };
+  "TotpVerifyRequest": {
+    "code": string;
+  };
   "ValidationError": {
     "loc": Array<string | number>;
     "msg": string;
@@ -569,6 +600,7 @@ export interface OpenApiComponents {
     "max_concurrent_nodes"?: number;
     "default_retry"?: OpenApiComponents['RetryPolicy'];
     "payload_inline_limit_bytes"?: number;
+    "error_workflow_version_id"?: string | null;
   };
   "WorkflowVersionOut": {
     "id": string;

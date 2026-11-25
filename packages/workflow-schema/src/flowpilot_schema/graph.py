@@ -163,6 +163,10 @@ class WorkflowSettings(BaseModel):
         le=1_048_576,
         description="Payloads exceeding this size are stored as external artifacts.",
     )
+    error_workflow_version_id: UUID | None = Field(
+        default=None,
+        description="Optional pinned WorkflowVersion UUID automatically invoked on run failure.",
+    )
 
 
 class WorkflowDefinition(BaseModel):

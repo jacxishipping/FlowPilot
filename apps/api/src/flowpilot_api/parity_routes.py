@@ -1038,7 +1038,7 @@ async def run_ai_workflow_assistant(
         actions_taken.append("Added sandboxed JavaScript Code node.")
 
     if not actions_taken:
-        # Run live validator diagnostics to explain issues and suggest fixes
+        # Run live validator diagnostics and optionally ask configured LLM for guidance
         defn = WorkflowDefinition(
             organization_id=tenant.organization_id,
             project_id=uuid4(),
@@ -1046,6 +1046,38 @@ async def run_ai_workflow_assistant(
             graph=updated,
         )
         val = WorkflowValidator(request.app.state.registry).validate(defn)
+        llm_provider = getattr(request.app.state, "agent_model_provider", None)
+        if llm_provider is not None:
+            try:
+                comp = await llm_provider.complete(
+                    provider="openai",
+                    model="gpt-4o-mini",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are FlowPilot AI Assistant. Help the user improve or debug "
+                                "their workflow concisely."
+                            ),
+                        },
+                        {
+                            "role": "user",
+                            "content": (
+                                f"Workflow '{body.workflow_name}' has {len(updated.nodes)} nodes "
+                                f"and {len(val.issues)} validation issues. Request: {body.message}"
+                            ),
+                        },
+                    ],
+                )
+                if comp.content:
+                    return {
+                        "reply": comp.content,
+                        "modified": False,
+                        "graph": updated.model_dump(mode="json"),
+                        "validation": val.model_dump(mode="json"),
+                    }
+            except Exception:
+                pass
         if val.issues:
             summary = "; ".join(f"[{i.code}] {i.message}" for i in val.issues[:5])
             reply = f"I inspected your workflow and found {len(val.issues)} issue(s): {summary}"

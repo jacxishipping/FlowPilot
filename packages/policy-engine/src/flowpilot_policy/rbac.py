@@ -97,17 +97,23 @@ def has_scope(granted_scopes: Iterable[str], required_scope: str) -> bool:
 def authorize(
     *,
     role: Role | None = None,
+    custom_permissions: Iterable[str] = (),
     scopes: Iterable[str] = (),
     required_permission: str,
 ) -> None:
-    """Enforce role and/or API key scope authorization."""
+    """Enforce built-in role, custom RBAC permissions, and/or API key scope authorization."""
     if role is not None:
-        role_perms = ROLE_PERMISSIONS[role]
+        role_perms = set(ROLE_PERMISSIONS[role]) | set(custom_permissions)
         if not has_scope(role_perms, required_permission):
             raise PolicyDeniedError(
                 f"Role '{role.value}' is not permitted to perform '{required_permission}'.",
                 code="RBAC_DENIED",
             )
+    elif custom_permissions and not has_scope(custom_permissions, required_permission):
+        raise PolicyDeniedError(
+            f"Custom role lacks required permission '{required_permission}'.",
+            code="RBAC_DENIED",
+        )
     scope_list = list(scopes)
     if scope_list and not has_scope(scope_list, required_permission):
         raise PolicyDeniedError(
