@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "flowpilot-policy"
+version = "0.1.0"
+description = "RBAC, scoped API key authorization, plan quotas, and rate limiting for FlowPilot"
+requires-python = ">=3.12"
+dependencies = [
+    "flowpilot-schema",
+    "pydantic>=2.10.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/flowpilot_policy"]

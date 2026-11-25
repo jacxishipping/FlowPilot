@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "flowpilot-agents"
+version = "0.1.0"
+description = "Bounded AI agent runtime, tool gateway, tenant-scoped memory, and supervisor multi-agent teams"
+requires-python = ">=3.12"
+dependencies = [
+    "flowpilot-schema",
+    "flowpilot-node-sdk",
+    "flowpilot-policy",
+    "flowpilot-nodes-core",
+    "pydantic>=2.10.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/flowpilot_agents"]

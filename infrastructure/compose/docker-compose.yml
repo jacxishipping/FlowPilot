@@ -1,0 +1,167 @@
+name: flowpilot
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-flowpilot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-flowpilot}
+      POSTGRES_DB: ${POSTGRES_DB:-flowpilot}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-postgres.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-flowpilot} -d ${POSTGRES_DB:-flowpilot}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-flowpilot}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-flowpilot-minio-dev}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-flowpilot} ${MINIO_ROOT_PASSWORD:-flowpilot-minio-dev} &&
+      mc mb --ignore-existing local/${FLOWPILOT_S3_BUCKET:-flowpilot-artifacts} &&
+      exit 0
+      "
+
+  temporal:
+    image: temporalio/auto-setup:1.25
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-flowpilot}
+      POSTGRES_PWD: ${POSTGRES_PASSWORD:-flowpilot}
+      POSTGRES_SEEDS: postgres
+      DBNAME: temporal
+      VISIBILITY_DBNAME: temporal_visibility
+    ports:
+      - "7233:7233"
+
+  temporal-ui:
+    image: temporalio/ui:2.32.0
+    restart: unless-stopped
+    depends_on:
+      - temporal
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CORS_ORIGINS: http://localhost:3000
+    ports:
+      - "8080:8080"
+
+  api:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/api.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+    environment:
+      FLOWPILOT_ENVIRONMENT: ${FLOWPILOT_ENVIRONMENT:-development}
+      FLOWPILOT_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-flowpilot}:${POSTGRES_PASSWORD:-flowpilot}@postgres:5432/${POSTGRES_DB:-flowpilot}
+      FLOWPILOT_REDIS_URL: redis://redis:6379/0
+      FLOWPILOT_TEMPORAL_ADDRESS: temporal:7233
+      FLOWPILOT_S3_ENDPOINT_URL: http://minio:9000
+      FLOWPILOT_S3_BUCKET: ${FLOWPILOT_S3_BUCKET:-flowpilot-artifacts}
+      FLOWPILOT_MASTER_KEY: ${FLOWPILOT_MASTER_KEY:-replace-with-strong-32-byte-secret-in-prod}
+      FLOWPILOT_CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+    ports:
+      - "8000:8000"
+
+  worker-workflow:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/worker.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+    environment:
+      FLOWPILOT_WORKER_POOL: workflow
+      FLOWPILOT_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-flowpilot}:${POSTGRES_PASSWORD:-flowpilot}@postgres:5432/${POSTGRES_DB:-flowpilot}
+      FLOWPILOT_TEMPORAL_ADDRESS: temporal:7233
+      FLOWPILOT_MASTER_KEY: ${FLOWPILOT_MASTER_KEY:-replace-with-strong-32-byte-secret-in-prod}
+
+  worker-integrations:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/worker.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+    environment:
+      FLOWPILOT_WORKER_POOL: integrations
+      FLOWPILOT_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-flowpilot}:${POSTGRES_PASSWORD:-flowpilot}@postgres:5432/${POSTGRES_DB:-flowpilot}
+      FLOWPILOT_TEMPORAL_ADDRESS: temporal:7233
+      FLOWPILOT_MASTER_KEY: ${FLOWPILOT_MASTER_KEY:-replace-with-strong-32-byte-secret-in-prod}
+
+  web:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/web.Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:

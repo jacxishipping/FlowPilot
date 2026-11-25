@@ -1,0 +1,17 @@
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "flowpilot-nodes-slack"
+version = "0.1.0"
+description = "First-party Slack integration node package for FlowPilot"
+requires-python = ">=3.12"
+dependencies = [
+    "flowpilot-schema",
+    "flowpilot-node-sdk",
+    "pydantic>=2.10.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/flowpilot_nodes_slack"]

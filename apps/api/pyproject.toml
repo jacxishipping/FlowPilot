@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "flowpilot-api"
+version = "0.1.0"
+description = "FastAPI multi-tenant REST & SSE API, SQLAlchemy persistence, and orchestration service for FlowPilot"
+requires-python = ">=3.12"
+dependencies = [
+    "flowpilot-schema",
+    "flowpilot-expressions",
+    "flowpilot-node-sdk",
+    "flowpilot-validator",
+    "flowpilot-engine",
+    "flowpilot-nodes-core",
+    "flowpilot-nodes-email",
+    "flowpilot-nodes-slack",
+    "flowpilot-nodes-database",
+    "flowpilot-credentials",
+    "flowpilot-policy",
+    "flowpilot-observability",
+    "flowpilot-agents",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "alembic>=1.14.0",
+    "asyncpg>=0.30.0",
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.6.0",
+    "httpx>=0.28.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/flowpilot_api"]

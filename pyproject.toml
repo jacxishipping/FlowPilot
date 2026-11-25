@@ -1,0 +1,138 @@
+[project]
+name = "flowpilot"
+version = "0.1.0"
+description = "FlowPilot — Multi-tenant workflow automation and autonomous AI agent platform"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "flowpilot-schema",
+    "flowpilot-expressions",
+    "flowpilot-node-sdk",
+    "flowpilot-validator",
+    "flowpilot-engine",
+    "flowpilot-nodes-core",
+    "flowpilot-nodes-email",
+    "flowpilot-nodes-slack",
+    "flowpilot-nodes-database",
+    "flowpilot-credentials",
+    "flowpilot-policy",
+    "flowpilot-observability",
+    "flowpilot-agents",
+    "flowpilot-api",
+    "flowpilot-scheduler",
+    "flowpilot-worker-workflow",
+    "flowpilot-worker-code",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "ruff>=0.8.0",
+    "mypy>=1.13.0",
+    "aiosqlite>=0.20.0",
+]
+
+[tool.uv.workspace]
+members = [
+    "packages/workflow-schema",
+    "packages/expression-engine",
+    "packages/node-sdk",
+    "packages/workflow-validator",
+    "packages/execution-engine",
+    "packages/credential-manager",
+    "packages/policy-engine",
+    "packages/observability",
+    "packages/agent-runtime",
+    "nodes/core",
+    "nodes/email",
+    "nodes/slack",
+    "nodes/database",
+    "apps/api",
+    "apps/scheduler",
+    "apps/workers/workflow",
+    "apps/workers/code",
+]
+
+[tool.uv.sources]
+flowpilot-schema = { workspace = true }
+flowpilot-expressions = { workspace = true }
+flowpilot-node-sdk = { workspace = true }
+flowpilot-validator = { workspace = true }
+flowpilot-engine = { workspace = true }
+flowpilot-nodes-core = { workspace = true }
+flowpilot-nodes-email = { workspace = true }
+flowpilot-nodes-slack = { workspace = true }
+flowpilot-nodes-database = { workspace = true }
+flowpilot-credentials = { workspace = true }
+flowpilot-policy = { workspace = true }
+flowpilot-observability = { workspace = true }
+flowpilot-agents = { workspace = true }
+flowpilot-api = { workspace = true }
+flowpilot-scheduler = { workspace = true }
+flowpilot-worker-workflow = { workspace = true }
+flowpilot-worker-code = { workspace = true }
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = [
+    "packages/workflow-schema/src",
+    "packages/expression-engine/src",
+    "packages/node-sdk/src",
+    "packages/workflow-validator/src",
+    "packages/execution-engine/src",
+    "packages/credential-manager/src",
+    "packages/policy-engine/src",
+    "packages/observability/src",
+    "packages/agent-runtime/src",
+    "nodes/core/src",
+    "nodes/email/src",
+    "nodes/slack/src",
+    "nodes/database/src",
+    "apps/api/src",
+    "apps/scheduler/src",
+    "apps/workers/workflow/src",
+    "apps/workers/code/src",
+    "tests",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["B008"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+plugins = ["pydantic.mypy"]
+mypy_path = [
+    "packages/workflow-schema/src",
+    "packages/expression-engine/src",
+    "packages/node-sdk/src",
+    "packages/workflow-validator/src",
+    "packages/execution-engine/src",
+    "packages/credential-manager/src",
+    "packages/policy-engine/src",
+    "packages/observability/src",
+    "packages/agent-runtime/src",
+    "nodes/core/src",
+    "nodes/email/src",
+    "nodes/slack/src",
+    "nodes/database/src",
+    "apps/api/src",
+    "apps/scheduler/src",
+    "apps/workers/workflow/src",
+    "apps/workers/code/src",
+]
+
+[[tool.mypy.overrides]]
+module = ["temporalio.*", "aiosqlite.*", "asyncpg.*", "alembic.*", "opentelemetry.*"]
+ignore_missing_imports = true

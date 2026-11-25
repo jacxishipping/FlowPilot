@@ -1,0 +1,31 @@
+groups:
+  - name: flowpilot.rules
+    rules:
+      - alert: FlowPilotHighApiErrorRate
+        expr: |
+          sum(rate(flowpilot_http_requests_total{status=~"5.."}[5m]))
+          / clamp_min(sum(rate(flowpilot_http_requests_total[5m])), 1) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "FlowPilot API 5xx error rate above 5%"
+          description: "Investigate API logs, PostgreSQL connectivity, and Temporal worker health."
+
+      - alert: FlowPilotWebhookFailures
+        expr: increase(flowpilot_webhook_runs_total{status="FAILED"}[10m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Elevated webhook-triggered workflow failures"
+          description: "More than 10 webhook workflow runs failed in the last 10 minutes."
+
+      - alert: FlowPilotAgentBudgetExhaustions
+        expr: increase(flowpilot_agent_runs_total{status="failed"}[15m]) > 15
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Spike in failed bounded AI agent runs"
+          description: "Check model provider availability, token limits, and tool gateway denials."

@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "flowpilot-worker-workflow"
+version = "0.1.0"
+description = "Temporal workflow & activity workers executing FlowPilot DAGs and nodes"
+requires-python = ">=3.12"
+dependencies = [
+    "flowpilot-schema",
+    "flowpilot-node-sdk",
+    "flowpilot-engine",
+    "flowpilot-nodes-core",
+    "flowpilot-api",
+    "temporalio>=1.8.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/flowpilot_worker_workflow"]
