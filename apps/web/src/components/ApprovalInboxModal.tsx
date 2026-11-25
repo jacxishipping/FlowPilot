@@ -26,41 +26,50 @@ export function ApprovalInboxModal({
   if (!open) return null;
 
   return (
-    <div className="modal-backdrop">
-      <div className="modal-card" style={{ width: 640 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 700, fontSize: 15 }}>
-            <Inbox size={16} color="#fbbf24" /> Human Approvals Inbox ({items.length})
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-card" style={{ width: 620 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <div className="modal-title">
+            <Inbox size={16} color="var(--warning)" />
+            <span>Human Approvals Inbox ({items.length})</span>
           </div>
-          <button className="btn" style={{ height: 28 }} onClick={onClose}>
-            <X size={14} />
+          <button
+            type="button"
+            className="btn btn-ghost btn-icon"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            <X size={15} />
           </button>
         </div>
 
-        <p style={{ color: "var(--text-secondary)", fontSize: 12 }}>
-          Review pending workflow & AI agent approval gates across all runs, or generate signed
+        <p className="modal-subtitle">
+          Review pending workflow &amp; AI agent approval gates across runs, or generate signed
           one-click Approve/Reject links for Slack and email.
         </p>
 
         {items.length === 0 ? (
-          <div style={{ color: "var(--text-muted)", padding: "20px 0" }}>
+          <div
+            className="surface-card"
+            style={{ color: "var(--text-muted)", textAlign: "center", padding: "24px 16px" }}
+          >
             No approvals in queue yet. Run a workflow with a Human Approval Gate to populate this
             inbox.
           </div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10, maxHeight: 400, overflowY: "auto" }}>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+              maxHeight: "58dvh",
+              overflowY: "auto",
+            }}
+          >
             {items.map((item) => (
-              <div
-                key={item.id}
-                style={{
-                  padding: 12,
-                  borderRadius: 8,
-                  border: "1px solid var(--border)",
-                  background: "var(--bg-elevated)",
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <strong>{item.title}</strong>
+              <div key={item.id} className="surface-card">
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                  <strong style={{ fontSize: 13 }}>{item.title}</strong>
                   <span
                     className={
                       item.decision === "pending"
@@ -73,25 +82,35 @@ export function ApprovalInboxModal({
                     {item.decision}
                   </span>
                 </div>
-                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: "var(--text-muted)",
+                    fontFamily: "var(--font-mono), monospace",
+                    marginTop: 4,
+                  }}
+                >
                   node:{item.node_id} · risk:{item.risk_level} · run:{item.run_id.slice(0, 8)}
                 </div>
                 {item.decision === "pending" && (
-                  <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
                     <button
-                      className="btn btn-success"
+                      type="button"
+                      className="btn btn-success btn-sm"
                       onClick={() => onDecide(item.id, true, "Approved from Inbox")}
                     >
                       <CheckCircle2 size={12} /> Approve
                     </button>
                     <button
-                      className="btn btn-danger"
+                      type="button"
+                      className="btn btn-danger btn-sm"
                       onClick={() => onDecide(item.id, false, "Rejected from Inbox")}
                     >
                       <XCircle size={12} /> Reject
                     </button>
                     <button
-                      className="btn"
+                      type="button"
+                      className="btn btn-sm"
                       onClick={async () => {
                         const res = await onGenerateLinks(item.id);
                         setLinksById((prev) => ({ ...prev, [item.id]: res }));
@@ -104,12 +123,13 @@ export function ApprovalInboxModal({
                 {linksById[item.id] && (
                   <div
                     style={{
-                      marginTop: 8,
-                      padding: 8,
+                      marginTop: 10,
+                      padding: 10,
                       borderRadius: 6,
-                      background: "var(--bg-app)",
-                      fontSize: 10,
-                      fontFamily: "monospace",
+                      background: "var(--bg-panel)",
+                      border: "1px solid var(--border)",
+                      fontSize: 10.5,
+                      fontFamily: "var(--font-mono), monospace",
                       wordBreak: "break-all",
                     }}
                   >

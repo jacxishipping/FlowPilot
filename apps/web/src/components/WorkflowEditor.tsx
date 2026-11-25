@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Background,
+  BackgroundVariant,
   Controls,
   MiniMap,
   ReactFlow,
@@ -14,18 +15,22 @@ import {
 } from "@xyflow/react";
 import {
   CheckSquare,
-  Cloud,
   GitCommitHorizontal,
   Inbox,
   LayoutGrid,
   LayoutTemplate,
   LogIn,
+  Moon,
+  MoreHorizontal,
+  PanelLeft,
+  PanelRight,
   Play,
   Plus,
   Redo2,
   Rocket,
   Save,
   Sparkles,
+  Sun,
   Undo2,
 } from "lucide-react";
 import {
@@ -114,7 +119,71 @@ function WorkflowEditorInner() {
   const [inboxItems, setInboxItems] = useState<InboxApprovalItem[]>([]);
   const [pinnedOutputs, setPinnedOutputs] = useState<Record<string, unknown>>({});
   const [savedWorkflows, setSavedWorkflows] = useState<WorkflowRecord[]>([]);
-  const [statusBanner, setStatusBanner] = useState<string>("Ready — offline preview or connect API");
+  const [statusBanner, setStatusBanner] = useState<string>("Ready");
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [leftPanelOpen, setLeftPanelOpen] = useState(true);
+  const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  const [isCompactViewport, setIsCompactViewport] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  // Sync theme preference to <html data-theme="...">
+  useEffect(() => {
+    const saved = typeof window !== "undefined" ? window.localStorage.getItem("fp-theme") : null;
+    if (saved === "dark" || saved === "light") {
+      setTheme(saved);
+      document.documentElement.dataset.theme = saved;
+    } else {
+      document.documentElement.dataset.theme = "light";
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    setTheme((prev) => {
+      const next = prev === "light" ? "dark" : "light";
+      document.documentElement.dataset.theme = next;
+      window.localStorage.setItem("fp-theme", next);
+      return next;
+    });
+  };
+
+  // Auto-collapse sidebars into clean overlay drawers on <= 1024px viewports
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 1024px)");
+    const apply = (matches: boolean) => {
+      setIsCompactViewport(matches);
+      if (matches) {
+        setLeftPanelOpen(false);
+        setRightPanelOpen(false);
+      } else {
+        setLeftPanelOpen(true);
+        setRightPanelOpen(true);
+      }
+    };
+    apply(mq.matches);
+    const handler = (ev: MediaQueryListEvent) => apply(ev.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+
+  // Close overflow menu on outside click or Escape
+  useEffect(() => {
+    if (!moreMenuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMoreMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMoreMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [moreMenuOpen]);
 
   // 3. Server State
   const [catalog, setCatalog] = useState<NodeCatalogEntry[]>(FALLBACK_NODE_CATALOG);
@@ -620,18 +689,46 @@ function WorkflowEditorInner() {
     return Array.from(parents);
   }, [graph.edges, selectedNodeId]);
 
+  const openLeftDrawer = () => {
+    setLeftPanelOpen((prev) => {
+      const next = !prev;
+      if (next && isCompactViewport) setRightPanelOpen(false);
+      return next;
+    });
+  };
+
+  const openRightDrawer = () => {
+    setRightPanelOpen((prev) => {
+      const next = !prev;
+      if (next && isCompactViewport) setLeftPanelOpen(false);
+      return next;
+    });
+  };
+
   return (
     <div className="studio-shell">
       <header className="topbar">
         <div className="topbar-group">
+          <button
+            type="button"
+            className="btn btn-ghost btn-icon"
+            onClick={openLeftDrawer}
+            title="Toggle Node Library"
+            aria-label="Toggle Node Library"
+          >
+            <PanelLeft size={16} />
+          </button>
+
           <div className="brand">
             <span className="brand-mark">FP</span>
-            <span>FlowPilot Studio</span>
+            <span className="brand-text">FlowPilot Studio</span>
           </div>
+
+          <span className="topbar-divider tablet-up" />
+
           {savedWorkflows.length > 0 && (
             <select
-              className="select"
-              style={{ width: 170, height: 30 }}
+              className="select workflow-switcher"
               value={workflowRecord?.id ?? ""}
               onChange={(e) => {
                 const found = savedWorkflows.find((w) => w.id === e.target.value);
@@ -639,11 +736,11 @@ function WorkflowEditorInner() {
                   setWorkflowRecord(found);
                   setWorkflowName(found.name);
                   setGraph(found.definition.graph);
-                  setStatusBanner(`Loaded workflow '${found.name}' (r${found.revision})`);
+                  setStatusBanner(`Loaded '${found.name}' (r${found.revision})`);
                 }
               }}
             >
-              <option value="">-- Switch Workflow --</option>
+              <option value="">Switch workflow...</option>
               {savedWorkflows.map((w) => (
                 <option key={w.id} value={w.id}>
                   {w.name} (r{w.revision})
@@ -651,69 +748,251 @@ function WorkflowEditorInner() {
               ))}
             </select>
           )}
+
           <input
-            className="input"
-            style={{ width: 200, height: 30 }}
+            className="workflow-title-input"
+            aria-label="Workflow name"
             value={workflowName}
             onChange={(e) => setWorkflowName(e.target.value)}
           />
-          <button className="btn" style={{ height: 30 }} onClick={handleNewWorkflow} title="New Workflow">
-            <Plus size={13} />
-          </button>
-          <span className="pill">
-            {workflowRecord ? `r${workflowRecord.revision}` : "local draft"}
+
+          <span className="pill tablet-up">
+            {workflowRecord ? `r${workflowRecord.revision}` : "draft"}
           </span>
           {publishedVersion !== null && (
-            <span className="pill pill-success">v{publishedVersion} published</span>
+            <span className="pill pill-success tablet-up">v{publishedVersion}</span>
           )}
         </div>
 
         <div className="topbar-group">
-          <button className="btn" onClick={handleOpenTemplates} title="Templates Gallery">
-            <LayoutTemplate size={13} /> Templates
-          </button>
-          <button className="btn" onClick={handleOpenInbox} title="Approvals Inbox">
-            <Inbox size={13} /> Inbox
-          </button>
-          <button className="btn" onClick={() => setAuthModalOpen(true)} title="Sign In / Register">
-            <LogIn size={13} /> {session ? "Account" : "Sign In"}
-          </button>
-          <button className="btn" onClick={handleOpenVersionHistory} title="Version History">
-            <GitCommitHorizontal size={13} /> Versions
-          </button>
-          <button className="btn" onClick={handleUndo} disabled={undoStack.length === 0} title="Undo">
-            <Undo2 size={13} />
-          </button>
-          <button className="btn" onClick={handleRedo} disabled={redoStack.length === 0} title="Redo">
-            <Redo2 size={13} />
+          <button
+            type="button"
+            className="btn btn-ghost tablet-up"
+            onClick={handleOpenTemplates}
+            title="Templates Gallery"
+          >
+            <LayoutTemplate size={14} /> Templates
           </button>
           <button
-            className="btn"
-            onClick={() => commitGraph((g) => autoLayoutGraph(g))}
-            title="Auto-layout DAG"
+            type="button"
+            className="btn btn-ghost tablet-up"
+            onClick={handleOpenInbox}
+            title="Approvals Inbox"
           >
-            <LayoutGrid size={13} /> Layout
+            <Inbox size={14} /> Inbox
           </button>
-          <button className="btn" onClick={() => setAiModalOpen(true)}>
-            <Sparkles size={13} color="#c084fc" /> AI Draft
+          <button
+            type="button"
+            className="btn btn-ghost tablet-up"
+            onClick={() => setAiModalOpen(true)}
+            title="Generate workflow draft with AI"
+          >
+            <Sparkles size={14} color="var(--brand-accent)" /> AI Draft
           </button>
-          <button className="btn" onClick={handleValidate}>
-            <CheckSquare size={13} /> Validate
+
+          <span className="topbar-divider desktop-only" />
+
+          <button
+            type="button"
+            className="btn btn-ghost desktop-only"
+            onClick={handleValidate}
+            title="Validate graph & policies"
+          >
+            <CheckSquare size={14} /> Validate
           </button>
-          <button className="btn" onClick={handleSave}>
-            <Save size={13} /> Save
+          <button
+            type="button"
+            className="btn btn-ghost desktop-only"
+            onClick={handleSave}
+            title="Save draft"
+          >
+            <Save size={14} /> Save
           </button>
-          <button className="btn btn-primary" onClick={handlePublish}>
-            <Rocket size={13} /> Publish
+
+          <button type="button" className="btn btn-primary" onClick={handlePublish}>
+            <Rocket size={13} /> <span className="btn-label-hide-xs">Publish</span>
           </button>
-          <button className="btn btn-success" onClick={handleRun}>
-            <Play size={13} /> Run
+          <button type="button" className="btn btn-success" onClick={handleRun}>
+            <Play size={13} /> <span className="btn-label-hide-xs">Run</span>
+          </button>
+
+          <div className="menu-anchor" ref={menuRef}>
+            <button
+              type="button"
+              className="btn btn-ghost btn-icon"
+              onClick={() => setMoreMenuOpen((v) => !v)}
+              title="More actions"
+              aria-label="More actions"
+              aria-expanded={moreMenuOpen}
+            >
+              <MoreHorizontal size={16} />
+            </button>
+
+            {moreMenuOpen && (
+              <div className="menu-dropdown" role="menu">
+                <button
+                  type="button"
+                  className="menu-item"
+                  onClick={() => {
+                    setMoreMenuOpen(false);
+                    handleNewWorkflow();
+                  }}
+                >
+                  <Plus size={14} /> New Workflow
+                </button>
+                <button
+                  type="button"
+                  className="menu-item"
+                  onClick={() => {
+                    setMoreMenuOpen(false);
+                    void handleOpenTemplates();
+                  }}
+                >
+                  <LayoutTemplate size={14} /> Templates
+                </button>
+                <button
+                  type="button"
+                  className="menu-item"
+                  onClick={() => {
+                    setMoreMenuOpen(false);
+                    void handleOpenInbox();
+                  }}
+                >
+                  <Inbox size={14} /> Approvals Inbox
+                </button>
+                <button
+                  type="button"
+                  className="menu-item"
+                  onClick={() => {
+                    setMoreMenuOpen(false);
+                    setAiModalOpen(true);
+                  }}
+                >
+                  <Sparkles size={14} /> AI Draft
+                </button>
+                <div className="menu-sep" />
+                <button
+                  type="button"
+                  className="menu-item"
+                  onClick={() => {
+                    setMoreMenuOpen(false);
+                    void handleValidate();
+                    if (isCompactViewport) setRightPanelOpen(true);
+                  }}
+                >
+                  <CheckSquare size={14} /> Validate
+                </button>
+                <button
+                  type="button"
+                  className="menu-item"
+                  onClick={() => {
+                    setMoreMenuOpen(false);
+                    void handleSave();
+                  }}
+                >
+                  <Save size={14} /> Save Draft
+                </button>
+                <button
+                  type="button"
+                  className="menu-item"
+                  onClick={() => {
+                    setMoreMenuOpen(false);
+                    void handleOpenVersionHistory();
+                  }}
+                >
+                  <GitCommitHorizontal size={14} /> Versions &amp; Diff
+                </button>
+                <div className="menu-sep" />
+                <button
+                  type="button"
+                  className="menu-item"
+                  onClick={() => {
+                    setMoreMenuOpen(false);
+                    commitGraph((g) => autoLayoutGraph(g));
+                  }}
+                >
+                  <LayoutGrid size={14} /> Auto Layout
+                </button>
+                <button
+                  type="button"
+                  className="menu-item"
+                  disabled={undoStack.length === 0}
+                  onClick={() => {
+                    setMoreMenuOpen(false);
+                    handleUndo();
+                  }}
+                >
+                  <Undo2 size={14} /> Undo
+                </button>
+                <button
+                  type="button"
+                  className="menu-item"
+                  disabled={redoStack.length === 0}
+                  onClick={() => {
+                    setMoreMenuOpen(false);
+                    handleRedo();
+                  }}
+                >
+                  <Redo2 size={14} /> Redo
+                </button>
+                <div className="menu-sep" />
+                <button
+                  type="button"
+                  className="menu-item"
+                  onClick={() => {
+                    setMoreMenuOpen(false);
+                    toggleTheme();
+                  }}
+                >
+                  {theme === "light" ? <Moon size={14} /> : <Sun size={14} />}
+                  {theme === "light" ? "Dark Mode" : "Light Mode"}
+                </button>
+                <button
+                  type="button"
+                  className="menu-item"
+                  onClick={() => {
+                    setMoreMenuOpen(false);
+                    setAuthModalOpen(true);
+                  }}
+                >
+                  <LogIn size={14} /> {session ? "Account" : "Sign In"}
+                </button>
+              </div>
+            )}
+          </div>
+
+          <button
+            type="button"
+            className="btn btn-ghost btn-icon"
+            onClick={openRightDrawer}
+            title="Toggle Inspector"
+            aria-label="Toggle Inspector"
+          >
+            <PanelRight size={16} />
           </button>
         </div>
       </header>
 
       <div className="workspace-body">
-        <NodeLibrary catalog={catalog} onAddNode={(entry) => handleAddNode(entry)} />
+        {isCompactViewport && (leftPanelOpen || rightPanelOpen) && (
+          <div
+            className="drawer-backdrop"
+            onClick={() => {
+              setLeftPanelOpen(false);
+              setRightPanelOpen(false);
+            }}
+          />
+        )}
+
+        <NodeLibrary
+          catalog={catalog}
+          open={leftPanelOpen}
+          onClose={() => setLeftPanelOpen(false)}
+          onAddNode={(entry) => {
+            handleAddNode(entry);
+            if (isCompactViewport) setLeftPanelOpen(false);
+          }}
+        />
 
         <main
           className="canvas-center"
@@ -741,46 +1020,46 @@ function WorkflowEditorInner() {
               setSelectedNodeId(node.id);
               setSelectedEdgeId(null);
               setActiveTab("configure");
+              if (isCompactViewport) setRightPanelOpen(true);
             }}
             onEdgeClick={(_, edge) => {
               setSelectedEdgeId(edge.id);
               setSelectedNodeId(null);
               setActiveTab("configure");
+              if (isCompactViewport) setRightPanelOpen(true);
             }}
             onPaneClick={() => {
               setSelectedNodeId(null);
               setSelectedEdgeId(null);
             }}
             fitView
-            colorMode="dark"
+            colorMode={theme}
           >
-            <Background color="#1e273b" gap={20} />
-            <Controls />
-            <MiniMap nodeColor="#6366f1" maskColor="rgba(11, 14, 20, 0.7)" />
+            <Background
+              variant={BackgroundVariant.Dots}
+              color={theme === "dark" ? "#27272a" : "#d4d4d8"}
+              gap={22}
+              size={1.2}
+            />
+            <Controls showInteractive={false} />
+            <MiniMap
+              nodeColor={theme === "dark" ? "#52525b" : "#a1a1aa"}
+              maskColor={theme === "dark" ? "rgba(9, 9, 11, 0.72)" : "rgba(250, 250, 250, 0.72)"}
+            />
           </ReactFlow>
 
-          <div
-            style={{
-              position: "absolute",
-              left: 14,
-              bottom: 14,
-              padding: "6px 10px",
-              borderRadius: 8,
-              background: "rgba(17, 22, 34, 0.92)",
-              border: "1px solid var(--border)",
-              fontSize: 11,
-              color: "var(--text-secondary)",
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-            }}
-          >
-            <Cloud size={12} color={session ? "#34d399" : "#9aa7c2"} />
+          <div className="canvas-status-pill" role="status" aria-live="polite">
+            <span
+              className="status-dot"
+              style={{ background: session ? "var(--success)" : "var(--text-muted)" }}
+            />
             <span>{statusBanner}</span>
           </div>
         </main>
 
         <InspectorPanel
+          open={rightPanelOpen}
+          onClose={() => setRightPanelOpen(false)}
           activeTab={activeTab}
           onTabChange={setActiveTab}
           selectedNode={selectedNode}

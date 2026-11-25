@@ -4,11 +4,13 @@ import { Handle, Position, type NodeProps } from "@xyflow/react";
 import type { FlowCanvasNode } from "@/lib/graphAdapter";
 
 const CATEGORY_COLORS: Record<string, string> = {
-  triggers: "#22d3ee",
-  data: "#818cf8",
+  triggers: "#06b6d4",
+  data: "#6366f1",
   control: "#f59e0b",
-  http: "#38bdf8",
-  ai: "#c084fc",
+  http: "#3b82f6",
+  ai: "#a855f7",
+  connectors: "#10b981",
+  communication: "#ec4899",
 };
 
 function statusBadgeClass(status?: string): string {
@@ -41,11 +43,7 @@ export function FlowNode({ data, selected }: NodeProps<FlowCanvasNode>) {
     <div
       className={`fp-node ${selected ? "selected" : ""}`}
       style={{
-        borderColor: hasValidationError
-          ? "#ef4444"
-          : selected
-            ? "#818cf8"
-            : undefined,
+        borderColor: hasValidationError ? "var(--danger)" : undefined,
       }}
     >
       {!isTrigger && (
@@ -53,25 +51,43 @@ export function FlowNode({ data, selected }: NodeProps<FlowCanvasNode>) {
           id="in"
           type="target"
           position={Position.Left}
-          style={{ width: 10, height: 10, background: "#94a3b8", border: "2px solid #0b0e14" }}
+          style={{
+            width: 9,
+            height: 9,
+            background: "var(--border-strong)",
+            border: "2px solid var(--handle-border)",
+          }}
         />
       )}
 
-      <div className="fp-node-header" style={{ borderTop: `3px solid ${accent}` }}>
-        <div style={{ minWidth: 0 }}>
-          <div
-            style={{
-              fontWeight: 700,
-              fontSize: 12,
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            {nodeDef.name || catalog?.metadata.name || nodeDef.id}
-          </div>
-          <div style={{ fontSize: 10, color: "#6c7a96", fontFamily: "monospace" }}>
-            {nodeDef.id} · {nodeDef.type}
+      <div className="fp-node-header">
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+          <span className="fp-node-dot" style={{ background: accent }} />
+          <div style={{ minWidth: 0 }}>
+            <div
+              style={{
+                fontWeight: 600,
+                fontSize: 12.5,
+                letterSpacing: "-0.01em",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {nodeDef.name || catalog?.metadata.name || nodeDef.id}
+            </div>
+            <div
+              style={{
+                fontSize: 10.5,
+                color: "var(--text-muted)",
+                fontFamily: "var(--font-mono), monospace",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {nodeDef.id} · {nodeDef.type}
+            </div>
           </div>
         </div>
         {executionStatus && (
@@ -82,11 +98,9 @@ export function FlowNode({ data, selected }: NodeProps<FlowCanvasNode>) {
       <div className="fp-node-body">
         <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
           <span className="pill">{category}</span>
-          {nodeDef.policy.require_approval && (
-            <span className="pill pill-warning">approval</span>
-          )}
+          {nodeDef.policy.require_approval && <span className="pill pill-warning">approval</span>}
           {Object.keys(nodeDef.credentials).length > 0 && (
-            <span className="pill pill-info">cred</span>
+            <span className="pill pill-info">vault</span>
           )}
           {hasValidationError && <span className="pill pill-danger">invalid</span>}
           {isPinned && <span className="pill pill-info">pinned</span>}
@@ -104,7 +118,14 @@ export function FlowNode({ data, selected }: NodeProps<FlowCanvasNode>) {
             </span>
           )}
           {typeof durationMs === "number" && (
-            <span style={{ marginLeft: "auto", fontSize: 10, color: "#6c7a96" }}>
+            <span
+              style={{
+                marginLeft: "auto",
+                fontSize: 10.5,
+                color: "var(--text-muted)",
+                fontFamily: "var(--font-mono), monospace",
+              }}
+            >
               {durationMs}ms
             </span>
           )}
@@ -118,11 +139,11 @@ export function FlowNode({ data, selected }: NodeProps<FlowCanvasNode>) {
             type="source"
             position={Position.Right}
             style={{
-              top: "35%",
-              width: 10,
-              height: 10,
+              top: "36%",
+              width: 9,
+              height: 9,
               background: "#10b981",
-              border: "2px solid #0b0e14",
+              border: "2px solid var(--handle-border)",
             }}
           />
           <Handle
@@ -131,10 +152,10 @@ export function FlowNode({ data, selected }: NodeProps<FlowCanvasNode>) {
             position={Position.Right}
             style={{
               top: "68%",
-              width: 10,
-              height: 10,
+              width: 9,
+              height: 9,
               background: "#f59e0b",
-              border: "2px solid #0b0e14",
+              border: "2px solid var(--handle-border)",
             }}
           />
         </>
@@ -144,11 +165,11 @@ export function FlowNode({ data, selected }: NodeProps<FlowCanvasNode>) {
           type="source"
           position={Position.Right}
           style={{
-            top: "45%",
-            width: 10,
-            height: 10,
+            top: "50%",
+            width: 9,
+            height: 9,
             background: accent,
-            border: "2px solid #0b0e14",
+            border: "2px solid var(--handle-border)",
           }}
         />
       )}
@@ -159,10 +180,10 @@ export function FlowNode({ data, selected }: NodeProps<FlowCanvasNode>) {
           type="source"
           position={Position.Bottom}
           style={{
-            width: 9,
-            height: 9,
+            width: 8,
+            height: 8,
             background: "#ef4444",
-            border: "2px solid #0b0e14",
+            border: "2px solid var(--handle-border)",
           }}
         />
       )}

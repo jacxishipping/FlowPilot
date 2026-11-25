@@ -26,29 +26,47 @@ export function AuthModal({ open, loading, onClose, onLogin, onRegister }: AuthM
   if (!open) return null;
 
   return (
-    <div className="modal-backdrop">
-      <div className="modal-card">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 700, fontSize: 15 }}>
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-card" style={{ width: 440 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <div className="modal-title">
             {mode === "login" ? <LogIn size={16} /> : <UserPlus size={16} />}
-            <span>{mode === "login" ? "Sign In to FlowPilot" : "Create FlowPilot Organization"}</span>
+            <span>{mode === "login" ? "Sign In to FlowPilot" : "Create Organization"}</span>
           </div>
-          <button className="btn" style={{ height: 28 }} onClick={onClose}>
-            <X size={14} />
+          <button
+            type="button"
+            className="btn btn-ghost btn-icon"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            <X size={15} />
           </button>
         </div>
 
-        <div style={{ display: "flex", gap: 8, marginTop: 12, marginBottom: 14 }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 4,
+            marginTop: 14,
+            marginBottom: 16,
+            padding: 3,
+            borderRadius: 8,
+            background: "var(--bg-elevated)",
+            border: "1px solid var(--border)",
+          }}
+        >
           <button
-            className={`btn ${mode === "register" ? "btn-primary" : ""}`}
-            style={{ flex: 1, justifyContent: "center" }}
+            type="button"
+            className={`btn ${mode === "register" ? "btn-primary" : "btn-ghost"}`}
+            style={{ flex: 1, height: 28 }}
             onClick={() => setMode("register")}
           >
             Register
           </button>
           <button
-            className={`btn ${mode === "login" ? "btn-primary" : ""}`}
-            style={{ flex: 1, justifyContent: "center" }}
+            type="button"
+            className={`btn ${mode === "login" ? "btn-primary" : "btn-ghost"}`}
+            style={{ flex: 1, height: 28 }}
             onClick={() => setMode("login")}
           >
             Sign In
@@ -90,11 +108,12 @@ export function AuthModal({ open, loading, onClose, onLogin, onRegister }: AuthM
           </>
         )}
 
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
-          <button className="btn" onClick={onClose}>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+          <button type="button" className="btn" onClick={onClose}>
             Cancel
           </button>
           <button
+            type="button"
             className="btn btn-primary"
             disabled={loading}
             onClick={() =>

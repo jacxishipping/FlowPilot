@@ -18,18 +18,24 @@ export function AiDraftModal({ open, loading, onClose, onGenerate }: AiDraftModa
   if (!open) return null;
 
   return (
-    <div className="modal-backdrop">
-      <div className="modal-card">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 700, fontSize: 15 }}>
-            <Sparkles size={16} color="#c084fc" /> Generate Workflow Draft from Natural Language
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <div className="modal-title">
+            <Sparkles size={16} color="var(--brand-accent)" />
+            <span>Generate Workflow Draft from Natural Language</span>
           </div>
-          <button className="btn" style={{ height: 28 }} onClick={onClose}>
-            <X size={14} />
+          <button
+            type="button"
+            className="btn btn-ghost btn-icon"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            <X size={15} />
           </button>
         </div>
 
-        <p style={{ color: "var(--text-secondary)", fontSize: 12, lineHeight: 1.5 }}>
+        <p className="modal-subtitle">
           FlowPilot generates a typed canonical JSON workflow graph matched against installed nodes
           and validates it immediately. Generated drafts are never auto-published or auto-run.
         </p>
@@ -43,10 +49,11 @@ export function AiDraftModal({ open, loading, onClose, onGenerate }: AiDraftModa
         />
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
-          <button className="btn" onClick={onClose}>
+          <button type="button" className="btn" onClick={onClose}>
             Cancel
           </button>
           <button
+            type="button"
             className="btn btn-primary"
             disabled={loading || prompt.trim().length < 5}
             onClick={() => onGenerate(prompt.trim())}

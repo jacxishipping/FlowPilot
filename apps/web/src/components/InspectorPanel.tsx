@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CheckCircle2, KeyRound, Play, ShieldAlert, Sparkles, Trash2, XCircle } from "lucide-react";
+import { CheckCircle2, KeyRound, Play, ShieldAlert, Sparkles, Trash2, X, XCircle } from "lucide-react";
 import { previewExpressionApi } from "@/lib/api";
 import type {
   CredentialMeta,
@@ -17,6 +17,8 @@ import type {
 export type InspectorTab = "configure" | "validate" | "runs" | "credentials";
 
 interface InspectorPanelProps {
+  open?: boolean;
+  onClose?: () => void;
   activeTab: InspectorTab;
   onTabChange: (tab: InspectorTab) => void;
   selectedNode: NodeDefinition | null;
@@ -45,6 +47,8 @@ interface InspectorPanelProps {
 }
 
 export function InspectorPanel({
+  open = true,
+  onClose,
   activeTab,
   onTabChange,
   selectedNode,
@@ -80,8 +84,8 @@ export function InspectorPanel({
   const errorCount = validation?.issues.filter((i) => i.severity === "error").length ?? 0;
 
   return (
-    <aside className="sidebar-right">
-      <div className="tabs">
+    <aside className={`sidebar-right ${open ? "" : "collapsed"}`} aria-label="Inspector">
+      <div className="tabs" style={{ alignItems: "center" }}>
         <button
           className={`tab-btn ${activeTab === "configure" ? "active" : ""}`}
           onClick={() => onTabChange("configure")}
@@ -106,6 +110,17 @@ export function InspectorPanel({
         >
           Vault
         </button>
+        {onClose && (
+          <button
+            type="button"
+            className="btn btn-ghost btn-icon panel-close-btn"
+            style={{ marginBottom: 4 }}
+            onClick={onClose}
+            aria-label="Close Inspector"
+          >
+            <X size={15} />
+          </button>
+        )}
       </div>
 
       <div className="panel-scroll">
@@ -197,9 +212,9 @@ export function InspectorPanel({
                   marginTop: 14,
                   padding: 12,
                   borderRadius: 8,
-                  border: "1px solid rgba(16, 185, 129, 0.35)",
-                  background: "rgba(16, 185, 129, 0.1)",
-                  color: "#34d399",
+                  border: "1px solid var(--success-border)",
+                  background: "var(--success-soft)",
+                  color: "var(--success)",
                   display: "flex",
                   alignItems: "center",
                   gap: 8,
@@ -234,7 +249,7 @@ export function InspectorPanel({
                         {issue.code}
                       </span>
                       {issue.node_id && (
-                        <span style={{ fontFamily: "monospace", fontSize: 10, color: "#9aa7c2" }}>
+                        <span style={{ fontFamily: "var(--font-mono), monospace", fontSize: 10, color: "var(--text-muted)" }}>
                           node:{issue.node_id}
                         </span>
                       )}
@@ -396,9 +411,9 @@ export function InspectorPanel({
                         fontFamily: "monospace",
                       }}
                     >
-                      <span style={{ color: "#6c7a96" }}>#{evt.sequence}</span>{" "}
-                      <strong style={{ color: "#818cf8" }}>{evt.event_type}</strong>
-                      {evt.node_id && <span style={{ color: "#34d399" }}> [{evt.node_id}]</span>}
+                      <span style={{ color: "var(--text-muted)" }}>#{evt.sequence}</span>{" "}
+                      <strong style={{ color: "var(--brand-accent)" }}>{evt.event_type}</strong>
+                      {evt.node_id && <span style={{ color: "var(--success)" }}> [{evt.node_id}]</span>}
                     </div>
                   ))}
                 </div>
@@ -667,10 +682,8 @@ function NodeConfigEditor({
                   borderRadius: 6,
                   fontSize: 11,
                   fontFamily: "monospace",
-                  background: previewResult.ok
-                    ? "rgba(16, 185, 129, 0.12)"
-                    : "rgba(239, 68, 68, 0.12)",
-                  color: previewResult.ok ? "#34d399" : "#f87171",
+                  background: previewResult.ok ? "var(--success-soft)" : "var(--danger-soft)",
+                  color: previewResult.ok ? "var(--success)" : "var(--danger)",
                   wordBreak: "break-all",
                 }}
               >
