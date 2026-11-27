@@ -29,10 +29,11 @@ test.describe("FlowPilot Visual Studio E2E", () => {
     await page.getByRole("button", { name: "Cancel" }).click();
 
     // Inspector tabs
-    await page.getByRole("button", { name: /Validate/i }).click();
+    const inspector = page.getByRole("complementary", { name: "Inspector" });
+    await inspector.getByRole("button", { name: /Validate/i }).click();
     await expect(page.getByText("Pre-Publish Diagnostics")).toBeVisible();
 
-    await page.getByRole("button", { name: /Vault/i }).click();
+    await inspector.getByRole("button", { name: /Vault/i }).click();
     await expect(page.getByText(/Envelope-Encrypted Vault/i)).toBeVisible();
   });
 });

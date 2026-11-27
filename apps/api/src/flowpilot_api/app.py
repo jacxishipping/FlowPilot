@@ -279,7 +279,7 @@ def create_app(
             headers={"X-Request-Id": req_id},
         )
 
-    @app.get("/health")
+    @app.api_route("/health", methods=["GET", "HEAD"])
     async def health() -> dict[str, str]:
         return {
             "status": "ok",
